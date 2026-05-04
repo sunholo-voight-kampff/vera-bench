@@ -23,6 +23,6 @@ verify list_contains
 fn main() -> Unit
     ! [Console.print]
     xs = MyList.Cons(1, MyList.Cons(2, MyList.Cons(3, MyList.Nil)))
-    Console.print(list_contains(xs, 2))
-    Console.print(list_contains(xs, 4))
-    Console.print(list_contains(MyList.Nil, 1))
+    Console.print("{list_contains(xs, 2)}")
+    Console.print("{list_contains(xs, 4)}")
+    Console.print("{list_contains(MyList.Nil, 1)}")

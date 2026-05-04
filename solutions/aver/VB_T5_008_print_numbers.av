@@ -5,7 +5,7 @@ module PrintNumbers
 fn print_and_continue(i: Int, n: Int) -> Unit
     ? "Prints i then continues with the next integer."
     ! [Console.print]
-    Console.print(i)
+    Console.print("{i}")
     print_loop(i + 1, n)
 
 fn print_loop(i: Int, n: Int) -> Unit
@@ -13,7 +13,7 @@ fn print_loop(i: Int, n: Int) -> Unit
     ! [Console.print]
     match i < n
         true  -> print_and_continue(i, n)
-        false -> Console.print(n)
+        false -> Console.print("{n}")
 
 fn print_numbers(n: Int) -> Unit
     ? "Prints 1 through n on separate lines."

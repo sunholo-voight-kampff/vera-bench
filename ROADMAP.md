@@ -2,6 +2,8 @@
 
 ## Where we are
 
+**v0.0.11** — Aver test-wrapper and 56 canonical baselines migrated to string interpolation (`Console.print("{x}")`) for compatibility with Aver 0.16's typed `Console.print`. Three previously-removed Aver baselines (T2-011/012/013) restored using Aver 0.15+ stdlib. Coverage-gap fix in 9 baselines whose `main()` printed only a subset of test cases. Methodology change documented in CHANGELOG.
+
 **v0.0.10** — Aver evaluation harness strips module-header `effects [...]` declarations before injecting the test main, so canonical and LLM-generated solutions continue to compile under Aver 0.13's enforced effects boundary. No-op on Aver 0.12 and earlier; methodology change documented in CHANGELOG.
 
 **v0.0.9** — 60 problems across 5 tiers (10 new T2/T3 problems with testable signatures). T1–T4 `run_correct` pool expanded from 18 to 30 testable problems. New T3 problems use Int-only signatures with internal ADT construction for CLI testability.

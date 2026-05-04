@@ -19,7 +19,7 @@ verify gcd
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(gcd(12, 8))
-    Console.print(gcd(7, 0))
-    Console.print(gcd(0, 5))
-    Console.print(gcd(100, 75))
+    Console.print("{gcd(12, 8)}")
+    Console.print("{gcd(7, 0)}")
+    Console.print("{gcd(0, 5)}")
+    Console.print("{gcd(100, 75)}")

@@ -20,6 +20,8 @@ verify pair_sum
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(pair_sum(3, 4))
-    Console.print(pair_sum(0, 0))
-    Console.print(pair_sum(-5, 5))
+    Console.print("{pair_sum(3, 4)}")
+    Console.print("{pair_sum(0, 0)}")
+    Console.print("{pair_sum(-5, 5)}")
+    Console.print("{pair_sum(10, -3)}")
+    Console.print("{pair_sum(100, 200)}")

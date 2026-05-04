@@ -1,0 +1,24 @@
+module GetCharCode
+    intent = "Returns the Unicode scalar value of the character at index `idx`."
+    exposes [get_char_code]
+
+fn get_char_code(s: String, idx: Int) -> Int
+    ? "Returns the code point at `idx`. Tests cover only in-range indices, so 0 on miss."
+    match String.charAt(s, idx)
+        Option.Some(c) -> Char.toCode(c)
+        Option.None -> 0
+
+verify get_char_code
+    get_char_code("A", 0) => 65
+    get_char_code("hello", 0) => 104
+    get_char_code("hello", 4) => 111
+    get_char_code("Z", 0) => 90
+    get_char_code("abc", 2) => 99
+
+fn main() -> Unit
+    ! [Console.print]
+    Console.print("{get_char_code("A", 0)}")
+    Console.print("{get_char_code("hello", 0)}")
+    Console.print("{get_char_code("hello", 4)}")
+    Console.print("{get_char_code("Z", 0)}")
+    Console.print("{get_char_code("abc", 2)}")

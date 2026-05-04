@@ -25,7 +25,7 @@ verify sum_with_state
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(sum_with_state(5))
-    Console.print(sum_with_state(0))
-    Console.print(sum_with_state(1))
-    Console.print(sum_with_state(10))
+    Console.print("{sum_with_state(5)}")
+    Console.print("{sum_with_state(0)}")
+    Console.print("{sum_with_state(1)}")
+    Console.print("{sum_with_state(10)}")

@@ -24,6 +24,8 @@ verify safe_divide
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(safe_divide(10, 2))
-    Console.print(safe_divide(10, 0))
-    Console.print(safe_divide(-6, 3))
+    Console.print("{safe_divide(10, 2)}")
+    Console.print("{safe_divide(7, 3)}")
+    Console.print("{safe_divide(10, 0)}")
+    Console.print("{safe_divide(0, 5)}")
+    Console.print("{safe_divide(-6, 3)}")

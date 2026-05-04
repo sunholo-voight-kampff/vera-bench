@@ -17,7 +17,7 @@ verify multiply
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(multiply(7, 6))
-    Console.print(multiply(0, 5))
-    Console.print(multiply(3, 0))
-    Console.print(multiply(1, 1))
+    Console.print("{multiply(7, 6)}")
+    Console.print("{multiply(0, 5)}")
+    Console.print("{multiply(3, 0)}")
+    Console.print("{multiply(1, 1)}")

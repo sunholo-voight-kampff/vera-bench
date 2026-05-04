@@ -28,6 +28,8 @@ verify classify_sign
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(classify_sign(42))
-    Console.print(classify_sign(-7))
-    Console.print(classify_sign(0))
+    Console.print("{classify_sign(42)}")
+    Console.print("{classify_sign(-7)}")
+    Console.print("{classify_sign(0)}")
+    Console.print("{classify_sign(1)}")
+    Console.print("{classify_sign(-100)}")

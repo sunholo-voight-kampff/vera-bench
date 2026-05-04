@@ -15,7 +15,7 @@ verify double_or_nothing
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(double_or_nothing(5))
-    Console.print(double_or_nothing(0))
-    Console.print(double_or_nothing(-3))
-    Console.print(double_or_nothing(1))
+    Console.print("{double_or_nothing(5)}")
+    Console.print("{double_or_nothing(0)}")
+    Console.print("{double_or_nothing(-3)}")
+    Console.print("{double_or_nothing(1)}")

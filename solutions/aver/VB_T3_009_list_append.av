@@ -22,6 +22,6 @@ fn main() -> Unit
     ! [Console.print]
     xs = MyList.Cons(1, MyList.Cons(2, MyList.Nil))
     ys = MyList.Cons(3, MyList.Cons(4, MyList.Nil))
-    Console.print(list_append(MyList.Nil, MyList.Nil))
-    Console.print(list_append(xs, ys))
-    Console.print(list_append(MyList.Nil, ys))
+    Console.print("{list_append(MyList.Nil, MyList.Nil)}")
+    Console.print("{list_append(xs, ys)}")
+    Console.print("{list_append(MyList.Nil, ys)}")

@@ -19,7 +19,7 @@ verify fib
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(fib(0))
-    Console.print(fib(1))
-    Console.print(fib(5))
-    Console.print(fib(10))
+    Console.print("{fib(0)}")
+    Console.print("{fib(1)}")
+    Console.print("{fib(5)}")
+    Console.print("{fib(10)}")

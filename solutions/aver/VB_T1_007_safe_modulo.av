@@ -13,7 +13,7 @@ verify safe_modulo
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(safe_modulo(10, 3))
-    Console.print(safe_modulo(7, 2))
-    Console.print(safe_modulo(6, 3))
-    Console.print(safe_modulo(5, 7))
+    Console.print("{safe_modulo(10, 3)}")
+    Console.print("{safe_modulo(7, 2)}")
+    Console.print("{safe_modulo(6, 3)}")
+    Console.print("{safe_modulo(5, 7)}")

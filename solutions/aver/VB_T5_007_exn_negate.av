@@ -16,7 +16,7 @@ verify safe_non_negative
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(safe_non_negative(5))
-    Console.print(safe_non_negative(-3))
-    Console.print(safe_non_negative(0))
-    Console.print(safe_non_negative(100))
+    Console.print("{safe_non_negative(5)}")
+    Console.print("{safe_non_negative(-3)}")
+    Console.print("{safe_non_negative(0)}")
+    Console.print("{safe_non_negative(100)}")

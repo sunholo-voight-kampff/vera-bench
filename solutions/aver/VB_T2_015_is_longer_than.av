@@ -15,5 +15,8 @@ verify is_longer_than
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(is_longer_than("hello", 3))
-    Console.print(is_longer_than("hi", 5))
+    Console.print("{is_longer_than("hello", 3)}")
+    Console.print("{is_longer_than("hi", 5)}")
+    Console.print("{is_longer_than("", 0)}")
+    Console.print("{is_longer_than("test", 4)}")
+    Console.print("{is_longer_than("test", 3)}")

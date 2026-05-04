@@ -502,7 +502,7 @@ def _evaluate_aver_code(
                 f"{code_without_main}\n\n"
                 f"fn main() -> Unit\n"
                 f"    ! [Console.print]\n"
-                f"    Console.print({entry_point}({args_str}))\n"
+                f'    Console.print("{{{entry_point}({args_str})}}")\n'
             )
         else:
             test_file = (
@@ -511,7 +511,7 @@ def _evaluate_aver_code(
                 f"{code_without_main}\n\n"
                 f"fn main() -> Unit\n"
                 f"    ! [Console.print]\n"
-                f"    Console.print({entry_point}({args_str}))\n"
+                f'    Console.print("{{{entry_point}({args_str})}}")\n'
             )
 
         test_path = work_dir / f"{safe_id}_test{i}_attempt{attempt}.av"

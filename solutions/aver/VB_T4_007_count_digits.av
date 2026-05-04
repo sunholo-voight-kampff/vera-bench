@@ -19,8 +19,8 @@ verify count_digits
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(count_digits(0))
-    Console.print(count_digits(9))
-    Console.print(count_digits(42))
-    Console.print(count_digits(12345))
-    Console.print(count_digits(1000000))
+    Console.print("{count_digits(0)}")
+    Console.print("{count_digits(9)}")
+    Console.print("{count_digits(42)}")
+    Console.print("{count_digits(12345)}")
+    Console.print("{count_digits(1000000)}")

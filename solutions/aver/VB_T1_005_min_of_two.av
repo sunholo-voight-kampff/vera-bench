@@ -15,7 +15,7 @@ verify min_of_two
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(min_of_two(3, 7))
-    Console.print(min_of_two(7, 3))
-    Console.print(min_of_two(5, 5))
-    Console.print(min_of_two(-1, -5))
+    Console.print("{min_of_two(3, 7)}")
+    Console.print("{min_of_two(7, 3)}")
+    Console.print("{min_of_two(5, 5)}")
+    Console.print("{min_of_two(-1, -5)}")

@@ -13,6 +13,7 @@ verify is_empty_string
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(is_empty_string(""))
-    Console.print(is_empty_string("hello"))
-    Console.print(is_empty_string(" "))
+    Console.print("{is_empty_string("")}")
+    Console.print("{is_empty_string("hello")}")
+    Console.print("{is_empty_string(" ")}")
+    Console.print("{is_empty_string("0")}")

@@ -22,6 +22,6 @@ fn main() -> Unit
     empty = MyList.Nil
     single = MyList.Cons(5, MyList.Nil)
     triple = MyList.Cons(1, MyList.Cons(2, MyList.Cons(3, MyList.Nil)))
-    Console.print(list_sum(empty))
-    Console.print(list_sum(single))
-    Console.print(list_sum(triple))
+    Console.print("{list_sum(empty)}")
+    Console.print("{list_sum(single)}")
+    Console.print("{list_sum(triple)}")

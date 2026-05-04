@@ -15,5 +15,8 @@ verify combined_length
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(combined_length("hello", "world"))
-    Console.print(combined_length("", ""))
+    Console.print("{combined_length("hello", "world")}")
+    Console.print("{combined_length("", "")}")
+    Console.print("{combined_length("a", "bc")}")
+    Console.print("{combined_length("test", "")}")
+    Console.print("{combined_length("", "xyz")}")

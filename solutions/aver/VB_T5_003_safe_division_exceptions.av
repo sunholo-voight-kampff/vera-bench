@@ -26,6 +26,6 @@ verify safe_div
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(safe_div(10, 2))
-    Console.print(safe_div(7, 0))
-    Console.print(safe_div(0, 1))
+    Console.print("{safe_div(10, 2)}")
+    Console.print("{safe_div(7, 0)}")
+    Console.print("{safe_div(0, 1)}")

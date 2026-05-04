@@ -17,7 +17,7 @@ verify clamp
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(clamp(50, 0, 100))
-    Console.print(clamp(-5, 0, 100))
-    Console.print(clamp(150, 0, 100))
-    Console.print(clamp(0, 0, 0))
+    Console.print("{clamp(50, 0, 100)}")
+    Console.print("{clamp(-5, 0, 100)}")
+    Console.print("{clamp(150, 0, 100)}")
+    Console.print("{clamp(0, 0, 0)}")

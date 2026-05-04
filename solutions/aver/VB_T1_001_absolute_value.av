@@ -16,8 +16,8 @@ verify absolute_value
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(absolute_value(0))
-    Console.print(absolute_value(42))
-    Console.print(absolute_value(-42))
-    Console.print(absolute_value(1))
-    Console.print(absolute_value(-1))
+    Console.print("{absolute_value(0)}")
+    Console.print("{absolute_value(42)}")
+    Console.print("{absolute_value(-42)}")
+    Console.print("{absolute_value(1)}")
+    Console.print("{absolute_value(-1)}")

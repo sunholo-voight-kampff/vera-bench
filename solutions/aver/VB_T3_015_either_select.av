@@ -24,6 +24,8 @@ verify either_select
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(either_select(10, 20, 1))
-    Console.print(either_select(10, 20, 0))
-    Console.print(either_select(42, 99, 100))
+    Console.print("{either_select(10, 20, 1)}")
+    Console.print("{either_select(10, 20, 0)}")
+    Console.print("{either_select(10, 20, -5)}")
+    Console.print("{either_select(42, 99, 100)}")
+    Console.print("{either_select(0, 0, 1)}")

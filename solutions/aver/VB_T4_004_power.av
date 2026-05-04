@@ -18,8 +18,8 @@ verify power
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(power(2, 10))
-    Console.print(power(3, 0))
-    Console.print(power(5, 1))
-    Console.print(power(2, 0))
-    Console.print(power(1, 100))
+    Console.print("{power(2, 10)}")
+    Console.print("{power(3, 0)}")
+    Console.print("{power(5, 1)}")
+    Console.print("{power(2, 0)}")
+    Console.print("{power(1, 100)}")

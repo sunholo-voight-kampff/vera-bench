@@ -13,6 +13,6 @@ verify greeting
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(greeting("Alice"))
-    Console.print(greeting("World"))
-    Console.print(greeting("Aver"))
+    Console.print("{greeting("Alice")}")
+    Console.print("{greeting("World")}")
+    Console.print("{greeting("Aver")}")

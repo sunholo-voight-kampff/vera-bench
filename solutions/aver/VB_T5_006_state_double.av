@@ -14,7 +14,7 @@ verify state_double
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(state_double(21))
-    Console.print(state_double(0))
-    Console.print(state_double(5))
-    Console.print(state_double(-3))
+    Console.print("{state_double(21)}")
+    Console.print("{state_double(0)}")
+    Console.print("{state_double(5)}")
+    Console.print("{state_double(-3)}")

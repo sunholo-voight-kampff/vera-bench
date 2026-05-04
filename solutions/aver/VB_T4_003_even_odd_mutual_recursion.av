@@ -30,7 +30,7 @@ verify is_even
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(is_even(0))
-    Console.print(is_even(1))
-    Console.print(is_even(4))
-    Console.print(is_even(7))
+    Console.print("{is_even(0)}")
+    Console.print("{is_even(1)}")
+    Console.print("{is_even(4)}")
+    Console.print("{is_even(7)}")

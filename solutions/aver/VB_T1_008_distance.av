@@ -17,7 +17,7 @@ verify distance
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(distance(3, 7))
-    Console.print(distance(7, 3))
-    Console.print(distance(5, 5))
-    Console.print(distance(-3, 3))
+    Console.print("{distance(3, 7)}")
+    Console.print("{distance(7, 3)}")
+    Console.print("{distance(5, 5)}")
+    Console.print("{distance(-3, 3)}")

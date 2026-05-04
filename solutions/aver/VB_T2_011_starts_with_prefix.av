@@ -1,0 +1,22 @@
+module StartsWithPrefix
+    intent = "Checks whether a string starts with a given prefix."
+    exposes [starts_with_prefix]
+
+fn starts_with_prefix(s: String, prefix: String) -> Bool
+    ? "Returns true when `s` begins with `prefix`."
+    String.startsWith(s, prefix)
+
+verify starts_with_prefix
+    starts_with_prefix("hello", "hel") => true
+    starts_with_prefix("hello", "world") => false
+    starts_with_prefix("", "") => true
+    starts_with_prefix("abc", "abcd") => false
+    starts_with_prefix("abc", "") => true
+
+fn main() -> Unit
+    ! [Console.print]
+    Console.print("{starts_with_prefix("hello", "hel")}")
+    Console.print("{starts_with_prefix("hello", "world")}")
+    Console.print("{starts_with_prefix("", "")}")
+    Console.print("{starts_with_prefix("abc", "abcd")}")
+    Console.print("{starts_with_prefix("abc", "")}")

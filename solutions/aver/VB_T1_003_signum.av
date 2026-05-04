@@ -16,6 +16,6 @@ verify signum
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(signum(42))
-    Console.print(signum(-7))
-    Console.print(signum(0))
+    Console.print("{signum(42)}")
+    Console.print("{signum(-7)}")
+    Console.print("{signum(0)}")

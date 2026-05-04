@@ -22,4 +22,4 @@ verify count_three
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(count_three())
+    Console.print("{count_three()}")

@@ -15,6 +15,8 @@ verify contains_substring
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(contains_substring("hello world", "world"))
-    Console.print(contains_substring("hello world", "mars"))
-    Console.print(contains_substring("abcdef", "cde"))
+    Console.print("{contains_substring("hello world", "world")}")
+    Console.print("{contains_substring("hello world", "mars")}")
+    Console.print("{contains_substring("abcdef", "cde")}")
+    Console.print("{contains_substring("abc", "")}")
+    Console.print("{contains_substring("", "a")}")

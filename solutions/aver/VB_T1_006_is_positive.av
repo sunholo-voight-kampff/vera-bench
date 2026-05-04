@@ -13,7 +13,7 @@ verify is_positive
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(is_positive(5))
-    Console.print(is_positive(-3))
-    Console.print(is_positive(0))
-    Console.print(is_positive(1))
+    Console.print("{is_positive(5)}")
+    Console.print("{is_positive(-3)}")
+    Console.print("{is_positive(0)}")
+    Console.print("{is_positive(1)}")

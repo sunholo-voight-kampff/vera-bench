@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-05-04
+
+### Changed
+
+- Aver test-wrapper harness emits `Console.print("{<call>}")` (string
+  interpolation) instead of `Console.print(<call>)`. Aver 0.16
+  ("Anneal") tightens `Console.print` to require `String` — the
+  previous form silently coerced `Int`, `Bool`, `List<T>`, etc. and
+  was a typecheck error from 0.16 onwards. Interpolation predates the
+  breaking change by many versions, so the same wrapper works on
+  Aver 0.10–0.15 and on 0.16+ (#65).
+- All 56 canonical Aver baseline solutions migrated from
+  `Console.print(EXPR)` to `Console.print("{EXPR}")`. Mechanical and
+  shape-preserving for nested expressions and string arguments.
+- 9 baselines whose `main()` printed only a subset of their
+  problem-JSON `test_cases` had `main()` regenerated to print every
+  test case. This was a pre-existing coverage gap that surfaces only
+  after the interpolation migration brings them past `aver check`.
+
+### Added
+
+- 3 Aver baselines restored: `VB_T2_011_starts_with_prefix.av`,
+  `VB_T2_012_ends_with_suffix.av`, `VB_T2_013_get_char_code.av`.
+  Originally added in v0.0.9 then removed during PR #57 review
+  because the Aver stdlib didn't expose `starts_with` / `ends_with` /
+  `char_at` at the time. Aver 0.15+ has `String.startsWith`,
+  `String.endsWith`, `String.charAt`, and `Char.toCode`, so the three
+  baselines are reinstated.
+
+### Compatibility note
+
+Aver scoring on Aver 0.16+ requires v0.0.11 — without this release,
+every injected `aver run` crashes at typecheck and `run_correct = 0%`
+across the board. For Aver 0.10–0.15, scoring may differ slightly
+between v0.0.10 and v0.0.11 result files for the same model on the
+same problems:
+
+- The 9 coverage-gap fixes mean `run_correct` is now measured against
+  the full set of test cases declared in each problem JSON, rather
+  than the partial set the baseline `main()` happened to print. Some
+  problems that previously appeared to pass on a partial check may
+  now fail on the full check, and vice versa.
+- The 3 restored T2 baselines (T2-011/012/013) now contribute to the
+  Aver baseline `run_correct` denominator (60 / 60), where they
+  previously contributed nothing (no canonical solution available, so
+  pre-#65 Aver baselines reported 60 problems with 3 effectively
+  excluded from scoring).
+
+The Aver baseline rises to 100% check@1, 100% run_correct against
+Aver 0.15.2 with this PR; the previous baseline was 95%/73% on the
+same compiler. The lift is real (not a definitional artefact) but
+result files are tagged with `bench_version` so cross-version
+comparisons can detect this boundary.
+
+Vera, Vera spec-from-NL, Python, and TypeScript scoring is
+unaffected.
+
 ## [0.0.10] - 2026-04-29
 
 ### Changed
@@ -191,7 +248,8 @@ Vera, Vera spec-from-NL, Python, and TypeScript scoring is unaffected.
 - Claude Sonnet 4: 96% check@1, 96% verify@1, 83% run_correct (50 problems, full-spec mode)
 - Python canonical baselines: 100% run_correct (24 testable problems)
 
-[Unreleased]: https://github.com/aallan/vera-bench/compare/v0.0.10...HEAD
+[Unreleased]: https://github.com/aallan/vera-bench/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/aallan/vera-bench/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/aallan/vera-bench/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/aallan/vera-bench/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/aallan/vera-bench/compare/v0.0.7...v0.0.8

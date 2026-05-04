@@ -30,6 +30,8 @@ verify color_code
 
 fn main() -> Unit
     ! [Console.print]
-    Console.print(color_code(0))
-    Console.print(color_code(1))
-    Console.print(color_code(2))
+    Console.print("{color_code(0)}")
+    Console.print("{color_code(1)}")
+    Console.print("{color_code(2)}")
+    Console.print("{color_code(3)}")
+    Console.print("{color_code(-1)}")
