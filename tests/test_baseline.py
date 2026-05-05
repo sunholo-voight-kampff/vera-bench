@@ -237,3 +237,31 @@ class TestBaselinesCLI:
         jsonl_files = list(tmp_path.glob("*.jsonl"))
         assert len(jsonl_files) == 1
         assert jsonl_files[0].name == "python-baseline.jsonl"
+
+    def test_baselines_populates_bench_version(self, tmp_path):
+        # Regression for #66: baseline JSONL lines used to ship with
+        # bench_version="" because the baseline runner didn't plumb
+        # version info. Every row should now carry the installed
+        # bench version.
+        import json
+
+        from click.testing import CliRunner
+
+        import vera_bench
+        from vera_bench.cli import main
+
+        result = CliRunner().invoke(main, ["baselines", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+        jsonl_path = tmp_path / "python-baseline.jsonl"
+        assert jsonl_path.exists()
+
+        lines = [
+            json.loads(ln) for ln in jsonl_path.read_text().splitlines() if ln.strip()
+        ]
+        assert lines, "expected at least one baseline row"
+        for row in lines:
+            assert row.get("bench_version") == vera_bench.__version__, (
+                f"row {row.get('problem_id')!r} has "
+                f"bench_version={row.get('bench_version')!r}, "
+                f"expected {vera_bench.__version__!r}"
+            )
