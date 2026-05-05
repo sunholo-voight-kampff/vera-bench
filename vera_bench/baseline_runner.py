@@ -556,8 +556,17 @@ def run_all_baselines(
     solutions_dir: Path,
     output_path: Path | None = None,
     language: str = "python",
+    bench_version: str = "",
 ) -> list[ProblemResult]:
-    """Run baselines for all problems. Write JSONL incrementally."""
+    """Run baselines for all problems. Write JSONL incrementally.
+
+    Args:
+        bench_version: vera-bench version string (e.g. "0.0.11"). Stamped onto
+            every ProblemResult so baseline JSONL lines self-attribute. The
+            field is part of `ProblemResult` for parity with LLM result files;
+            baselines historically left it empty, which made them hard to
+            attribute across version boundaries (#66).
+    """
     if language not in ("python", "typescript", "aver"):
         raise NotImplementedError(
             f"Baseline runner for {language!r} not yet implemented"
@@ -587,6 +596,11 @@ def run_all_baselines(
             task = progress.add_task("Running baselines...", total=len(run_problems))
             for problem in run_problems:
                 result = runner(problem, solutions_dir, work_dir)
+                # Stamp bench_version centrally rather than threading it
+                # through each per-language runner's ProblemResult call sites
+                # (~18 of them across this file). This keeps the attribution
+                # plumbing in one place.
+                result.bench_version = bench_version
                 all_results.append(result)
 
                 if output_path:

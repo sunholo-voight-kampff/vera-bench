@@ -305,8 +305,11 @@ def report(results_dir: Path):
 )
 def baselines(language: str, output_dir: Path | None):
     """Run baseline solutions against test cases."""
+    import vera_bench
     from vera_bench.baseline_runner import run_all_baselines
     from vera_bench.metrics import compute_metrics
+
+    bench_ver = vera_bench.__version__
 
     root = _repo_root()
 
@@ -351,6 +354,7 @@ def baselines(language: str, output_dir: Path | None):
         solutions_dir=solutions_dir,
         output_path=output_path,
         language=language,
+        bench_version=bench_ver,
     )
 
     # Print summary
