@@ -86,7 +86,7 @@ for model in \
   gpt-4.1-2025-04-14 \
   gpt-4o \
   moonshot/kimi-k2.5 \
-  moonshot/kimi-k2-turbo-preview; do
+  moonshot/kimi-k2.6; do
   python scripts/run_full_benchmark.py --model "$model" --skip-baselines
 done
 

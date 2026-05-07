@@ -100,7 +100,11 @@ MODELS: list[ModelSpec] = [
     # Sonnet row
     ModelSpec("Claude Sonnet 4", "claude-sonnet-4-20250514", "sonnet"),
     ModelSpec("GPT-4o", "gpt-4o", "sonnet"),
-    ModelSpec("Kimi K2 Turbo", "moonshot-kimi-k2-turbo-preview", "sonnet"),
+    # K2.6 lands in the sonnet slot for now (replacing kimi-k2-turbo-preview,
+    # deprecated 2026-05-25). Semantically K2.6 is the new flagship-line model
+    # rather than a "secondary/cheaper" variant; tier placement to be revisited
+    # in the next re-sweep — see issue #68.
+    ModelSpec("Kimi K2.6", "moonshot-kimi-k2.6", "sonnet"),
 ]
 
 # Mode label -> glob pattern fragment inserted between prefix and bench-VER.

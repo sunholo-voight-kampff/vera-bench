@@ -47,7 +47,7 @@ MODELS = {
     ],
     "moonshot": [
         ("Kimi K2.5", "moonshot/kimi-k2.5"),
-        ("Kimi K2 Turbo", "moonshot/kimi-k2-turbo-preview"),
+        ("Kimi K2.6", "moonshot/kimi-k2.6"),
     ],
 }
 
