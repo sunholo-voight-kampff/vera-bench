@@ -93,14 +93,17 @@ class ModelSpec:
 
 
 MODELS: list[ModelSpec] = [
-    # Flagship row
+    # Flagship row — current top-tier model from each provider.
     ModelSpec("Claude Opus 4", "claude-opus-4-20250514", "flagship"),
     ModelSpec("GPT-4.1", "gpt-4.1-2025-04-14", "flagship"),
-    ModelSpec("Kimi K2.5", "moonshot-kimi-k2.5", "flagship"),
-    # Sonnet row
+    ModelSpec("Kimi K2.6", "moonshot-kimi-k2.6", "flagship"),
+    # Sonnet row — previous-generation / secondary slot from each provider.
+    # Kimi K2.5 moves here from flagship after Moonshot promoted K2.6 to
+    # the active flagship-line slot (kimi-k2-turbo-preview deprecated
+    # 2026-05-25, see #68).
     ModelSpec("Claude Sonnet 4", "claude-sonnet-4-20250514", "sonnet"),
     ModelSpec("GPT-4o", "gpt-4o", "sonnet"),
-    ModelSpec("Kimi K2 Turbo", "moonshot-kimi-k2-turbo-preview", "sonnet"),
+    ModelSpec("Kimi K2.5", "moonshot-kimi-k2.5", "sonnet"),
 ]
 
 # Mode label -> glob pattern fragment inserted between prefix and bench-VER.

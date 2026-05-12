@@ -86,7 +86,7 @@ for model in \
   gpt-4.1-2025-04-14 \
   gpt-4o \
   moonshot/kimi-k2.5 \
-  moonshot/kimi-k2-turbo-preview; do
+  moonshot/kimi-k2.6; do
   python scripts/run_full_benchmark.py --model "$model" --skip-baselines
 done
 
@@ -109,10 +109,12 @@ Rough per-model totals observed on v0.0.9 (60 problems, 2026-04):
 | Claude Sonnet 4 | ~15 min |
 | GPT-4.1 / GPT-4o | ~10–12 min |
 | Moonshot K2.5 | ~3.5 h (slow provider; Aver especially) |
-| Moonshot K2 Turbo | ~1.5 h |
+| Moonshot K2.6 | TBD (no sweep against this model yet — see #68) |
+| Moonshot K2 Turbo *(historical; SKU deprecated 2026-05-25)* | ~1.5 h |
 
-The full six-model sweep is dominated by the two Moonshot models. Expect
-5–8 hours end-to-end.
+The Moonshot models dominate the sweep wall-clock; expect 5–8 hours
+end-to-end. K2.6 timings will be filled in after the first full sweep
+once we have data to attribute.
 
 ### Output files
 
