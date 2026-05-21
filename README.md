@@ -31,6 +31,16 @@ Results from [VeraBench v0.0.7](https://github.com/aallan/vera-bench/releases/ta
 | Claude Sonnet 4 | 79% | 96% | 88% |
 | GPT-4o | 78% | 93% | 83% |
 
+### Baseline reference results (added in this fork)
+
+Reference solutions written by humans for each target language. These establish the *ceiling* — what's possible in each language — independent of any LLM behaviour.
+
+| Language | check@1 | run_correct@1 | source |
+|----------|---------|---------------|--------|
+| **AILANG** | **100% (36/36)** | **100% (36/36)** | `solutions/ailang/` (this fork) |
+
+AILANG baseline matches the strongest published Vera LLM result (Kimi K2.5, 100%) as a reference implementation, demonstrating that AILANG can faithfully express every solvable VeraBench problem. LLM-eval mode for AILANG (`vera-bench run --language ailang`) is a planned follow-up — see [AILANG_RESULTS.md](./AILANG_RESULTS.md) for the full details.
+
 ### Key findings
 
 **Kimi K2.5 writes perfect Vera code** — 100% run_correct on both full-spec and spec-from-NL modes, beating Python (86%) and TypeScript (91%). This is the first model where Vera is the best language across the board.
