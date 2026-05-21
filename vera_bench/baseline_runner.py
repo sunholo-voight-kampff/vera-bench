@@ -579,13 +579,89 @@ def run_ailang_baseline(
             timestamp=_now(),
         )
 
+    # AILANG_TRACE=off suppresses the OTLP probe + tracing overhead on every
+    # invocation — significant when running 60 problems in sequence.
     run_env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY")}
+    run_env["AILANG_TRACE"] = "off"
     start = time.monotonic()
 
-    # `ailang check` validates parse + type without running effects
+    # For problems without test cases we only need check (no execution).
+    # For problems WITH test cases, skip the separate check call —
+    # `ailang run` already validates parse + types before executing, so
+    # an explicit check is redundant. This halves the process-spawn count
+    # for the typical case (~60 spawns -> ~30 spawns across the suite).
+    if not test_cases:
+        try:
+            check_result = subprocess.run(  # noqa: S603
+                ["ailang", "check", "--relax-modules", str(baseline_path)],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                check=False,
+                env=run_env,
+            )
+        except FileNotFoundError:
+            return ProblemResult(
+                problem_id=problem_id,
+                model="baseline",
+                language="ailang",
+                attempt=1,
+                check_pass=False,
+                error_message="ailang not found on PATH",
+                timestamp=_now(),
+            )
+        except subprocess.TimeoutExpired:
+            return ProblemResult(
+                problem_id=problem_id,
+                model="baseline",
+                language="ailang",
+                attempt=1,
+                check_pass=False,
+                error_message="ailang check timed out",
+                wall_time_s=round(time.monotonic() - start, 2),
+                timestamp=_now(),
+            )
+
+        if check_result.returncode != 0:
+            err = (check_result.stderr or check_result.stdout)[:200]
+            return ProblemResult(
+                problem_id=problem_id,
+                model="baseline",
+                language="ailang",
+                attempt=1,
+                check_pass=False,
+                error_message=err,
+                wall_time_s=round(time.monotonic() - start, 2),
+                timestamp=_now(),
+            )
+
+        return ProblemResult(
+            problem_id=problem_id,
+            model="baseline",
+            language="ailang",
+            attempt=1,
+            check_pass=True,
+            run_correct=None,
+            wall_time_s=round(time.monotonic() - start, 2),
+            timestamp=_now(),
+        )
+
+    # `ailang run` executes the file's `main` function. The IO capability
+    # is required for println output. Also validates parse + types
+    # internally (so we don't need a separate `ailang check` call here).
     try:
-        check_result = subprocess.run(  # noqa: S603
-            ["ailang", "check", "--relax-modules", str(baseline_path)],  # noqa: S607
+        run_result = subprocess.run(  # noqa: S603
+            [
+                "ailang",
+                "run",
+                "--relax-modules",
+                "--quiet",
+                "--caps",
+                "IO",
+                "--entry",
+                "main",
+                str(baseline_path),
+            ],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -608,64 +684,6 @@ def run_ailang_baseline(
             model="baseline",
             language="ailang",
             attempt=1,
-            check_pass=False,
-            error_message="ailang check timed out",
-            wall_time_s=round(time.monotonic() - start, 2),
-            timestamp=_now(),
-        )
-
-    if check_result.returncode != 0:
-        err = (check_result.stderr or check_result.stdout)[:200]
-        return ProblemResult(
-            problem_id=problem_id,
-            model="baseline",
-            language="ailang",
-            attempt=1,
-            check_pass=False,
-            error_message=err,
-            wall_time_s=round(time.monotonic() - start, 2),
-            timestamp=_now(),
-        )
-
-    if not test_cases:
-        return ProblemResult(
-            problem_id=problem_id,
-            model="baseline",
-            language="ailang",
-            attempt=1,
-            check_pass=True,
-            run_correct=None,
-            wall_time_s=round(time.monotonic() - start, 2),
-            timestamp=_now(),
-        )
-
-    # `ailang run` executes the file's `main` function. The IO capability
-    # is required for println output.
-    try:
-        run_result = subprocess.run(  # noqa: S603
-            [
-                "ailang",
-                "run",
-                "--relax-modules",
-                "--quiet",
-                "--caps",
-                "IO",
-                "--entry",
-                "main",
-                str(baseline_path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-            env=run_env,
-        )
-    except subprocess.TimeoutExpired:
-        return ProblemResult(
-            problem_id=problem_id,
-            model="baseline",
-            language="ailang",
-            attempt=1,
             check_pass=True,
             run_correct=False,
             tests_total=len(test_cases),
@@ -677,17 +695,23 @@ def run_ailang_baseline(
     elapsed = round(time.monotonic() - start, 2)
 
     if run_result.returncode != 0:
+        # Distinguish compile-time errors (check_pass=False) from runtime errors
+        # by stderr inspection. AILANG's compile errors are prefixed with
+        # "Error PAR_" (parse), "Error TC_" (type-check), or "Error MOD_"
+        # (module). Anything else is treated as a runtime error.
+        err = (run_result.stderr or "")[:400]
+        is_compile_error = any(
+            tag in err for tag in ("Error PAR", "Error TC", "Error MOD")
+        )
         return ProblemResult(
             problem_id=problem_id,
             model="baseline",
             language="ailang",
             attempt=1,
-            check_pass=True,
+            check_pass=not is_compile_error,
             run_correct=False,
             tests_total=len(test_cases),
-            error_message=(
-                run_result.stderr[:200] if run_result.stderr else "Non-zero exit"
-            ),
+            error_message=err[:200] if err else "Non-zero exit",
             wall_time_s=elapsed,
             timestamp=_now(),
         )
