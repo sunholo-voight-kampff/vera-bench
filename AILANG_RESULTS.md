@@ -13,10 +13,10 @@ This PR adds AILANG as a baseline target language AND as an LLM-eval target. Hea
 | Mode | Coverage | check@1 | run_correct@1 |
 |------|----------|---------|---------------|
 | **AI-authored references** (Claude Opus 4.7, iterated) | 60 problems | **100% (36/36 testable)** | **100% (36/36 testable)** |
-| **Single-shot LLM-eval** (Claude Haiku 4.5) | 60 problems | 90% (54/60) | **97% (35/36 testable)** |
-| **Single-shot LLM-eval** (Kimi K2.5 via OpenRouter) | 60 problems | 77% (46/60) | **97% (35/36 testable)** |
+| **Single-shot LLM-eval (post-fix)** (Claude Haiku 4.5, 2026-05-21) | 60 problems | 90% (54/60) | **100% (36/36 testable)** |
+| **Single-shot LLM-eval** (Kimi K2.5 via OpenRouter, 2026-05-21) | 60 problems | 77% (46/60) | **97% (35/36 testable)** |
 
-Both modes hit 97-100% run_correct. The reference run is the ceiling; the LLM-eval rows are the floor. AILANG can be written by very-different-sized models (cheap Haiku 4.5 + flagship Kimi K2.5) at comparable quality.
+Both modes hit 97-100% run_correct. The reference run is the ceiling; the LLM-eval rows are the floor. AILANG can be written by very-different-sized models (cheap Haiku 4.5 + flagship Kimi K2.5) at comparable quality. The Haiku "post-fix" row reflects results AFTER shipping the upstream prompt fix surfaced by this benchmark (letrec-needs-block-body example); the pre-fix Haiku run was 97% (35/36).
 
 | Tier | Tests | check@1 | run_correct@1 |
 |------|-------|---------|---------------|
@@ -36,7 +36,7 @@ Both the AI-authored reference run and the single-shot LLM-eval rows for AILANG,
 | Run | Mode | check@1 | run_correct@1 |
 |-----|------|---------|---------------|
 | **AILANG (this work)** | **AI-authored + iterated** (Claude Opus 4.7) | **100%** | **100%** |
-| **AILANG + Claude Haiku 4.5** | **LLM single-shot** (this work) | **90%** | **97%** |
+| **AILANG + Claude Haiku 4.5 (post-fix)** | **LLM single-shot** (this work) | **90%** | **100%** |
 | **AILANG + Kimi K2.5 (OpenRouter)** | **LLM single-shot** (this work) | **77%** | **97%** |
 | Vera + Kimi K2.5 | LLM single-shot (published) | 100% | 100% |
 | Vera + GPT-4.1 | LLM single-shot (published) | — | 91% |
@@ -107,7 +107,7 @@ For perf-honest reporting, the metric of interest is `tests_passed / tests_total
 
 ## Known limitations & follow-ups
 
-- **LLM-eval mode (`vera-bench run --language ailang`)** is not yet wired. The `run` subcommand currently only handles vera, python, typescript, and aver. Adding AILANG to that path requires (a) extending the click choice in `cli.py`, (b) implementing a prompt loader that fetches AILANG's teaching prompt via `ailang prompt`, and (c) hooking the LLM-generated output into the same `run_ailang_baseline` execution path. Tracked in [AILANG's M-VERA-BENCH-INTEGRATION design doc](https://github.com/sunholo-data/ailang/blob/dev/design_docs/planned/v0_23_0/m-vera-bench-integration.md) Phase 2.
+- **LLM-eval mode (`vera-bench run --language ailang`)**: wired in this PR (2026-05-21). Both Claude Haiku 4.5 and Kimi K2.5 (via OpenRouter) are tested above. See the LLM-eval rows in the Headline results table. Tracked in [AILANG's M-VERA-BENCH-INTEGRATION design doc](https://github.com/sunholo-data/ailang/blob/dev/design_docs/planned/v0_23_0/m-vera-bench-integration.md) Phase 2.
 - **`verify@1` parity**: Vera's `verify_tier1`/`verify_tier3` columns report Z3 contract verification. AILANG has Z3-backed `requires`/`ensures` via `ailang verify` but the current AILANG solutions don't ship with VeraBench's contract translations. Phase 2 of the design doc covers translating `contracts.requires`/`ensures` from problem JSON into AILANG syntax and reporting `verify@1` per-problem.
 - **`get_char_code`**: required adding `std/bytes.byteAt` upstream in AILANG. The benchmark surfaced a real stdlib gap; tracked + shipped in [AILANG's M-BYTES-TOINTS-BYTEAT design doc](https://github.com/sunholo-data/ailang/blob/dev/design_docs/planned/v0_23_0/m-bytes-toints-byteAt.md). Solutions older than 2026-05-21 use a placeholder; current solution uses `byteAt`.
 

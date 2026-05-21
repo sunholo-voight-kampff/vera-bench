@@ -546,24 +546,6 @@ def _evaluate_aver_code(
     return result
 
 
-_AILANG_COMPILE_ERROR_TAGS = (
-    "Error PAR",
-    "Error TC",
-    "Error MOD",
-    "PAR_",
-    "TC_",
-    "MOD_",
-    "EFF_",
-    "parse error",
-    "module loading error",
-    "type error",
-)
-
-
-def _is_ailang_compile_error(err: str) -> bool:
-    return any(tag in err for tag in _AILANG_COMPILE_ERROR_TAGS)
-
-
 def _strip_ailang_main(code: str) -> str:
     """Remove any top-level `main` function from AILANG code.
 
@@ -727,12 +709,13 @@ def _evaluate_ailang_code(
         return result
 
     # When checking without a main, AILANG may complain about a missing
-    # entrypoint or pure-only module — that's fine if the only error is
-    # the missing main. We treat real compile errors (PAR/TC/MOD) as
-    # failures but tolerate the missing-main case.
+    # entrypoint or pure-only module — that's the ONE non-zero exit we
+    # tolerate, since the harness adds a per-test-case main below. Every
+    # other non-zero exit (tagged compile error OR untagged failure) is
+    # treated as check failure.
     if check_proc.returncode != 0:
         err = (check_proc.stderr or check_proc.stdout)[:500]
-        if _is_ailang_compile_error(err) and "missing main" not in err.lower():
+        if "missing main" not in err.lower():
             result["check_pass"] = False
             result["error_message"] = err
             if not test_cases:

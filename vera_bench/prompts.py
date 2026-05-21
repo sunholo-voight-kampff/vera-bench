@@ -273,6 +273,11 @@ def load_ailang_prompt(source: str | Path | None = None) -> str:
                 "ailang not found on PATH. "
                 "Install AILANG: https://github.com/sunholo-data/ailang"
             ) from e
+        except subprocess.TimeoutExpired as e:
+            raise RuntimeError(
+                "`ailang prompt --source embedded` timed out after 10s. "
+                "Check your ailang installation."
+            ) from e
         if result.returncode != 0:
             raise RuntimeError(
                 f"`ailang prompt` failed: {result.stderr[:200]}"
