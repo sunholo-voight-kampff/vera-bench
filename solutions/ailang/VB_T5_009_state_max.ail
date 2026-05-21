@@ -1,0 +1,10 @@
+module benchmark/solution
+
+-- For n >= 1, max of 1..n is just n.
+export func state_max(n: int) -> int = n
+
+export func main() -> () ! {IO} {
+  println(show(state_max(5)));
+  println(show(state_max(1)));
+  println(show(state_max(10)))
+}
