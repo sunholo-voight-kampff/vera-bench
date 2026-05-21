@@ -1,8 +1,13 @@
-# AILANG on VeraBench — Baseline Results
+# AILANG on VeraBench — AI-Authored Reference Results
+
+**Solutions authored by:** Claude Opus 4.7 (effort: high), 2026-05-21
+**AILANG language authored by:** multi-model team — Claude (Anthropic), GPT (OpenAI), Gemini (Google), 2024–2026
+**AILANG version:** `dev` branch as of 2026-05-21 (includes `std/bytes.byteAt`)
+**VeraBench version:** v0.0.11 (fork: `sunholo-data/vera-bench`)
 
 ## TL;DR
 
-**AILANG passes 100% of testable VeraBench problems as a baseline reference.**
+**AILANG passes 100% of testable VeraBench problems with AI-authored reference solutions.** Notable: AILANG is the only target language in VeraBench where *both* the language design AND the reference code are AI-authored.
 
 | Tier | Tests | check@1 | run_correct@1 |
 |------|-------|---------|---------------|
@@ -17,16 +22,32 @@ Plus 24 problems with `test_cases: []` (no graded output) — all 24 pass `check
 
 Comparison to VeraBench v0.0.7's published headline numbers:
 
-| Run | check@1 | run_correct@1 |
-|-----|---------|---------------|
-| **AILANG baseline (this work)** | **100%** | **100%** |
-| Vera + Kimi K2.5 (LLM, published) | 100% | 100% |
-| Vera + GPT-4.1 (LLM, published) | — | 91% |
-| Vera + Claude Opus 4 (LLM, published) | — | 88% |
-| Python + Kimi K2.5 (LLM, published) | — | 86% |
-| TypeScript + Kimi K2.5 (LLM, published) | — | 91% |
+| Run | Mode | check@1 | run_correct@1 |
+|-----|------|---------|---------------|
+| **AILANG (this work)** | AI-authored + iterated | **100%** | **100%** |
+| Vera + Kimi K2.5 | LLM single-shot | 100% | 100% |
+| Vera + GPT-4.1 | LLM single-shot | — | 91% |
+| Vera + Claude Opus 4 | LLM single-shot | — | 88% |
+| Python + Kimi K2.5 | LLM single-shot | — | 86% |
+| TypeScript + Kimi K2.5 | LLM single-shot | — | 91% |
 
-Note: AILANG numbers are **baseline** (reference solutions written by humans), not LLM runs. Vera's published numbers are LLM-generated. The honest comparison is "AILANG baseline matches the strongest published Vera LLM result" — establishing the ceiling. LLM-eval mode wiring (`vera-bench run --language ailang --model <model>`) is a planned follow-up.
+### Important framing — these are AI-authored solutions, in an AI-authored language
+
+**AILANG is unique among the languages in VeraBench: the language itself is 100% AI-authored, by a multi-model team.** Vera, Python, TypeScript, and Aver were all designed by human teams. AILANG's compiler, runtime, type system, effect rows, stdlib, and teaching prompt were collaboratively authored across Claude, OpenAI (GPT), and Gemini models over the course of its development. The solutions in `solutions/ailang/` were written by Claude Opus 4.7 (effort: high) on 2026-05-21, given AILANG's own [teaching prompt](https://ailang.sunholo.com/docs/prompts/current). **An AI multi-model team designed the language; a single AI then wrote production-quality code in it.**
+
+This is the meta-finding worth surfacing in the talk:
+
+- VeraBench's published LLM rows: *Human-designed language; AI writes the code.* Standard methodology.
+- AILANG's row: *AI-designed language (Claude + OpenAI + Gemini); AI writes the code (Claude Opus 4.7).* End-to-end AI-authored stack — the full circle.
+
+The methodological distinction vs VeraBench's published LLM numbers is also **the eval mode**:
+
+- **VeraBench's published LLM numbers** (`vera-bench run --language vera --model <m>`) are *single-shot LLM calls per problem*: the harness sends the problem JSON + Vera's SKILL.md to the LLM, captures the response, runs it once, grades it. No iteration.
+- **This baseline** is *AI-authored with iteration*: the same Claude Opus 4.7 wrote each solution from scratch given AILANG's teaching prompt, then each solution was tested via the same VeraBench harness; failures (e.g. lambda syntax in the initial T2_001 attempt; `get_char_code` missing stdlib support → added `std/bytes.byteAt` upstream) were iterated to convergence. This is closer to how a real agent works in a coding harness with retries than to a single-shot eval.
+
+The honest claim is: **AILANG (the AI-designed language) can faithfully express every solvable VeraBench problem when an AI agent writes the code with normal iteration feedback.** That establishes the ceiling. The single-shot floor — what AILANG looks like when an LLM is called once per problem with only the prompt to go on — is what the planned LLM-eval mode (`vera-bench run --language ailang --model <m>`) will measure.
+
+The contrast itself is informative: VeraBench's "AI writes Vera one-shot" hits 100% with Kimi K2.5 (a human-designed language). Our "AI writes AILANG with iteration" also hits 100% with Claude Opus 4.7 (an AI-designed language). The full-circle pattern — AI designs the language, AI writes the code in it — is testable now in a way it wasn't before this contribution.
 
 ## How to reproduce
 

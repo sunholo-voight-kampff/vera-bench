@@ -31,15 +31,17 @@ Results from [VeraBench v0.0.7](https://github.com/aallan/vera-bench/releases/ta
 | Claude Sonnet 4 | 79% | 96% | 88% |
 | GPT-4o | 78% | 93% | 83% |
 
-### Baseline reference results (added in this fork)
+### AILANG: AI-designed language, AI-authored solutions (added in this fork)
 
-Reference solutions written by humans for each target language. These establish the *ceiling* — what's possible in each language — independent of any LLM behaviour.
+[AILANG](https://ailang.sunholo.com/) is unique among VeraBench's target languages: **the language itself is 100% AI-authored, by a multi-model team**. Vera, Python, TypeScript, and Aver are human-designed. AILANG's compiler, type system, effect rows, stdlib, and teaching prompt were collaboratively authored by Claude, OpenAI, and Gemini models during AILANG's development.
 
-| Language | check@1 | run_correct@1 | source |
-|----------|---------|---------------|--------|
-| **AILANG** | **100% (36/36)** | **100% (36/36)** | `solutions/ailang/` (this fork) |
+The reference solutions in `solutions/ailang/` are AI-authored too — written by **Claude Opus 4.7 (effort: high), 2026-05-21**, given AILANG's own teaching prompt as the language reference, with iteration on the harness's check/run feedback (similar to a real coding-agent loop, not a single-shot LLM call).
 
-AILANG baseline matches the strongest published Vera LLM result (Kimi K2.5, 100%) as a reference implementation, demonstrating that AILANG can faithfully express every solvable VeraBench problem. LLM-eval mode for AILANG (`vera-bench run --language ailang`) is a planned follow-up — see [AILANG_RESULTS.md](./AILANG_RESULTS.md) for the full details.
+| Mode | Author model + date | check@1 | run_correct@1 |
+|------|---------------------|---------|---------------|
+| AI-authored + iterated | **Claude Opus 4.7 (high), 2026-05-21** | **100% (36/36)** | **100% (36/36)** |
+
+This is the full-circle finding: AI designs the language, AI writes the code in it, and the result passes every solvable VeraBench problem. Single-shot LLM-eval mode for AILANG (`vera-bench run --language ailang`) is a planned follow-up — see [AILANG_RESULTS.md](./AILANG_RESULTS.md) for the full methodology, per-tier breakdown, and follow-ups.
 
 ### Key findings
 
