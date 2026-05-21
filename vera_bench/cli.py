@@ -76,6 +76,17 @@ def validate(problems_dir: Path | None, solutions_dir: Path | None):
     is_flag=True,
     help="Keep temporary generated files",
 )
+@click.option(
+    "--parallel",
+    type=int,
+    default=1,
+    show_default=True,
+    help=(
+        "Run N problems concurrently via ThreadPoolExecutor. "
+        "Use >1 for slow models (e.g. Kimi K2.5). "
+        "Each worker is I/O-bound on its LLM call + subprocess runs."
+    ),
+)
 def run(
     model: str,
     tier: int | None,
@@ -86,6 +97,7 @@ def run(
     output_dir: Path | None,
     max_tokens: int,
     keep_temps: bool,
+    parallel: int,
 ):
     """Run benchmark against an LLM model."""
     from vera_bench.metrics import compute_metrics
@@ -274,6 +286,7 @@ def run(
         keep_temps=keep_temps,
         bench_version=bench_ver,
         vera_version=vera_ver,
+        parallel=parallel,
     )
 
     # Print summary

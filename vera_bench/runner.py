@@ -1108,20 +1108,62 @@ def run_benchmark(
     keep_temps: bool = False,
     bench_version: str = "",
     vera_version: str = "",
+    parallel: int = 1,
 ) -> list[ProblemResult]:
     """Run the full benchmark across all problems.
 
     Results are written to JSONL incrementally (survives crashes).
+
+    When ``parallel > 1``, problems are dispatched to a ThreadPoolExecutor
+    with ``parallel`` workers. Each problem runs independently (its own
+    LLM call, its own subprocess-based check/run), so threads only block
+    on I/O (HTTP to the LLM provider, subprocess spawns to the toolchain).
+    The GIL is not a bottleneck. Use this when sweeping slow models —
+    e.g. Kimi K2.5 at ~50s/problem sequential becomes ~5s/problem with
+    parallel=10.
+
+    JSONL output ordering is by completion order, not by problem index,
+    when running in parallel. Each line is self-contained (carries
+    ``problem_id``) so downstream consumers can sort if needed.
     """
     work_dir = Path(tempfile.mkdtemp(prefix="verabench_"))
     all_results: list[ProblemResult] = []
 
     try:
-        with Progress(console=console) as progress:
-            task = progress.add_task("Running benchmark...", total=len(problems))
-            for problem in problems:
-                problem_results = run_single_problem(
-                    problem=problem,
+        if parallel <= 1:
+            with Progress(console=console) as progress:
+                task = progress.add_task("Running benchmark...", total=len(problems))
+                for problem in problems:
+                    problem_results = run_single_problem(
+                        problem=problem,
+                        client=client,
+                        skill_md=skill_md,
+                        vera=vera,
+                        work_dir=work_dir,
+                        mode=mode,
+                        language=language,
+                        max_fix_attempts=max_fix_attempts,
+                        max_tokens=max_tokens,
+                        bench_version=bench_version,
+                        vera_version=vera_version,
+                    )
+                    all_results.extend(problem_results)
+
+                    if output_path:
+                        with open(output_path, "a", encoding="utf-8") as f:
+                            for r in problem_results:
+                                f.write(r.to_jsonl() + "\n")
+
+                    progress.advance(task)
+        else:
+            import threading
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            write_lock = threading.Lock()
+
+            def _run_one(p: dict) -> list[ProblemResult]:
+                return run_single_problem(
+                    problem=p,
                     client=client,
                     skill_md=skill_md,
                     vera=vera,
@@ -1133,15 +1175,32 @@ def run_benchmark(
                     bench_version=bench_version,
                     vera_version=vera_version,
                 )
-                all_results.extend(problem_results)
 
-                # Write JSONL incrementally
-                if output_path:
-                    with open(output_path, "a", encoding="utf-8") as f:
-                        for r in problem_results:
-                            f.write(r.to_jsonl() + "\n")
-
-                progress.advance(task)
+            with Progress(console=console) as progress:
+                task = progress.add_task(
+                    f"Running benchmark (parallel={parallel})...",
+                    total=len(problems),
+                )
+                with ThreadPoolExecutor(max_workers=parallel) as executor:
+                    futures = {executor.submit(_run_one, p): p for p in problems}
+                    for fut in as_completed(futures):
+                        try:
+                            problem_results = fut.result()
+                        except Exception as exc:  # noqa: BLE001
+                            pid = futures[fut].get("id", "?")
+                            console.print(
+                                f"[red]Worker failed on {pid}: {exc}[/red]"
+                            )
+                            progress.advance(task)
+                            continue
+                        all_results.extend(problem_results)
+                        if output_path:
+                            with write_lock, open(
+                                output_path, "a", encoding="utf-8"
+                            ) as f:
+                                for r in problem_results:
+                                    f.write(r.to_jsonl() + "\n")
+                        progress.advance(task)
     finally:
         if not keep_temps:
             shutil.rmtree(work_dir, ignore_errors=True)
