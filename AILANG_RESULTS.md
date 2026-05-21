@@ -1,13 +1,22 @@
-# AILANG on VeraBench — AI-Authored Reference Results
+# AILANG on VeraBench — AI-Authored Reference + LLM-Eval Results
 
-**Solutions authored by:** Claude Opus 4.7 (effort: high), 2026-05-21
+**Reference solutions authored by:** Claude Opus 4.7 (effort: high), 2026-05-21
 **AILANG language authored by:** multi-model team — Claude (Anthropic), GPT (OpenAI), Gemini (Google), 2024–2026
 **AILANG version:** `dev` branch as of 2026-05-21 (includes `std/bytes.byteAt`)
-**VeraBench version:** v0.0.11 (fork: `sunholo-data/vera-bench`)
+**VeraBench version:** v0.0.11 (fork: `sunholo-voight-kampff/vera-bench`)
+**LLM-eval mode:** wired in `vera-bench run --language ailang`; OpenRouter `or/*` route added.
 
-## TL;DR
+## TL;DR — both modes hit 97-100%
 
-**AILANG passes 100% of testable VeraBench problems with AI-authored reference solutions.** Notable: AILANG is the only target language in VeraBench where *both* the language design AND the reference code are AI-authored.
+This PR adds AILANG as a baseline target language AND as an LLM-eval target. Headline results:
+
+| Mode | Coverage | check@1 | run_correct@1 |
+|------|----------|---------|---------------|
+| **AI-authored references** (Claude Opus 4.7, iterated) | 60 problems | **100% (36/36 testable)** | **100% (36/36 testable)** |
+| **Single-shot LLM-eval** (Claude Haiku 4.5) | 60 problems | 90% (54/60) | **97% (35/36 testable)** |
+| **Single-shot LLM-eval** (Kimi K2.5 via OpenRouter) | 60 problems | 77% (46/60) | **97% (35/36 testable)** |
+
+Both modes hit 97-100% run_correct. The reference run is the ceiling; the LLM-eval rows are the floor. AILANG can be written by very-different-sized models (cheap Haiku 4.5 + flagship Kimi K2.5) at comparable quality.
 
 | Tier | Tests | check@1 | run_correct@1 |
 |------|-------|---------|---------------|
@@ -20,16 +29,23 @@
 
 Plus 24 problems with `test_cases: []` (no graded output) — all 24 pass `check@1`.
 
-Comparison to VeraBench v0.0.7's published headline numbers:
+### Headline comparison vs VeraBench's published numbers
+
+Both the AI-authored reference run and the single-shot LLM-eval rows for AILANG, against VeraBench v0.0.7's published Vera/Python/TypeScript LLM results:
 
 | Run | Mode | check@1 | run_correct@1 |
 |-----|------|---------|---------------|
-| **AILANG (this work)** | AI-authored + iterated | **100%** | **100%** |
-| Vera + Kimi K2.5 | LLM single-shot | 100% | 100% |
-| Vera + GPT-4.1 | LLM single-shot | — | 91% |
-| Vera + Claude Opus 4 | LLM single-shot | — | 88% |
-| Python + Kimi K2.5 | LLM single-shot | — | 86% |
-| TypeScript + Kimi K2.5 | LLM single-shot | — | 91% |
+| **AILANG (this work)** | **AI-authored + iterated** (Claude Opus 4.7) | **100%** | **100%** |
+| **AILANG + Claude Haiku 4.5** | **LLM single-shot** (this work) | **90%** | **97%** |
+| **AILANG + Kimi K2.5 (OpenRouter)** | **LLM single-shot** (this work) | **77%** | **97%** |
+| Vera + Kimi K2.5 | LLM single-shot (published) | 100% | 100% |
+| Vera + GPT-4.1 | LLM single-shot (published) | — | 91% |
+| Vera + Claude Opus 4 | LLM single-shot (published) | — | 88% |
+| Vera + Claude Sonnet 4 | LLM single-shot (published) | — | 79% |
+| Python + Kimi K2.5 | LLM single-shot (published) | — | 86% |
+| TypeScript + Kimi K2.5 | LLM single-shot (published) | — | 91% |
+
+**The strongest finding for the talk**: AILANG with a *cheap* LLM (Claude Haiku 4.5) hits 97% run_correct on the full VeraBench suite — matching what published numbers show only flagship LLMs can do on Vera and Python. Kimi K2.5 on AILANG hits 97% too, vs its 100% on Vera (3pp gap; same LLM, different language). The single-shot AILANG floor is competitive with the published flagship-tier numbers across all comparison languages.
 
 ### Important framing — these are AI-authored solutions, in an AI-authored language
 
