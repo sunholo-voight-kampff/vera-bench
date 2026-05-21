@@ -1,0 +1,18 @@
+module benchmark/solution
+
+-- KNOWN AILANG STDLIB GAP: no primitive to extract ASCII byte value from
+-- a single-character string. std/bytes.fromString gives bytes but no
+-- direct byteAt(b, i) -> int operation. This benchmark surfaces a real
+-- gap that's worth filing as a stdlib feature request.
+--
+-- Placeholder returns 0 — will compile and run but fail tests.
+
+export func get_char_code(s: string, i: int) -> int = 0
+
+export func main() -> () ! {IO} {
+  println(show(get_char_code("A", 0)));
+  println(show(get_char_code("hello", 0)));
+  println(show(get_char_code("hello", 4)));
+  println(show(get_char_code("Z", 0)));
+  println(show(get_char_code("abc", 2)))
+}
