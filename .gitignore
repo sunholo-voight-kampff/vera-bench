@@ -29,3 +29,6 @@ results/timing.json
 # produce a suffixed filename and stay local.
 assets/results-graph_*.png
 assets/benchmark_*.png
+
+# AILANG runtime cache (created by ailang run in solutions/ailang/)
+solutions/ailang/.ailang/

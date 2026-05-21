@@ -294,7 +294,7 @@ def report(results_dir: Path):
 @main.command()
 @click.option(
     "--language",
-    type=click.Choice(["python", "typescript", "aver"]),
+    type=click.Choice(["python", "typescript", "aver", "ailang"]),
     default="python",
     help="Baseline language to run",
 )
@@ -342,6 +342,18 @@ def baselines(language: str, output_dir: Path | None):
             console.print(
                 "[red]Error: aver not found on PATH. "
                 "Install with: cargo install aver-lang[/red]"
+            )
+            raise SystemExit(1)
+
+    # Fail fast if ailang is not on PATH
+    if language == "ailang":
+        import shutil as _shutil
+
+        if _shutil.which("ailang") is None:
+            console.print(
+                "[red]Error: ailang not found on PATH. "
+                "Install from https://github.com/sunholo-data/ailang "
+                "(make install)[/red]"
             )
             raise SystemExit(1)
 
