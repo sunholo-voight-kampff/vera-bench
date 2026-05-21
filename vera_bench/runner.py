@@ -32,7 +32,8 @@ from vera_bench.vera_runner import VeraRunner
 console = Console()
 
 _FENCE_RE = re.compile(
-    r"```(?:vera|aver|python|py|typescript|ts)?\s*\n(.*?)\n?```", re.DOTALL
+    r"```(?:vera|aver|ailang|ail|python|py|typescript|ts)?\s*\n(.*?)\n?```",
+    re.DOTALL,
 )
 
 
@@ -545,6 +546,238 @@ def _evaluate_aver_code(
     return result
 
 
+_AILANG_COMPILE_ERROR_TAGS = (
+    "Error PAR",
+    "Error TC",
+    "Error MOD",
+    "PAR_",
+    "TC_",
+    "MOD_",
+    "EFF_",
+    "parse error",
+    "module loading error",
+    "type error",
+)
+
+
+def _is_ailang_compile_error(err: str) -> bool:
+    return any(tag in err for tag in _AILANG_COMPILE_ERROR_TAGS)
+
+
+def _strip_ailang_main(code: str) -> str:
+    """Remove any top-level `main` function from AILANG code.
+
+    Handles both single-expression `= expr` and block `{ ... }` forms.
+    The harness wraps the LLM's function with its own per-test-case main,
+    so any main the LLM supplied is stripped to avoid name conflicts.
+    """
+    out = []
+    lines = code.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        # Match: `export func main` / `func main` / `pure func main` etc.
+        is_main_def = bool(
+            re.match(r"(export\s+)?(pure\s+)?func\s+main\b", stripped)
+        )
+        if not is_main_def:
+            out.append(line)
+            i += 1
+            continue
+
+        # Skip the main definition. Detect single-expr (`=`) vs block (`{`).
+        # Multi-line bodies may span many lines; track brace depth.
+        joined = line
+        if "{" in line and "}" in line:
+            # Single-line `{ ... }` form — just skip this one line.
+            i += 1
+            continue
+        if "{" in line:
+            # Multi-line block — track depth until matching `}`.
+            depth = joined.count("{") - joined.count("}")
+            i += 1
+            while i < len(lines) and depth > 0:
+                depth += lines[i].count("{") - lines[i].count("}")
+                i += 1
+            continue
+        # Otherwise treat as `=` form: the body is the rest of this line.
+        # Future continuation lines (indented) would also be part of it,
+        # but in practice `main = ...` bodies are short. Skip the def line.
+        i += 1
+        # Drop any immediately-following indented continuation lines.
+        while i < len(lines) and (lines[i].startswith(" ") or lines[i].startswith("\t")):
+            i += 1
+    return "\n".join(out)
+
+
+def _ailang_literal(value) -> str:
+    """Convert a Python value to an AILANG literal expression."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        if value < 0:
+            return f"({value})"
+        return str(value)
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, str):
+        escaped = (
+            value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+        )
+        return f'"{escaped}"'
+    if isinstance(value, list):
+        items = ", ".join(_ailang_literal(v) for v in value)
+        return f"[{items}]"
+    return str(value)
+
+
+def _evaluate_ailang_code(
+    code: str,
+    problem: dict,
+    work_dir: Path,
+    attempt: int,
+) -> dict:
+    """Wrap the LLM's AILANG code with a per-test-case main and grade.
+
+    Mirrors the Aver pattern: the prompt asks for the function ONLY
+    (no main), the harness strips any main the LLM provided anyway,
+    then for each test case writes a fresh .ail file that defines the
+    LLM's function plus an `export func main() ! {IO}` that calls
+    entry_point(args) and prints the result. The harness compares
+    that stdout against the expected value per test case.
+    """
+    entry_point = problem.get("entry_point", "")
+    test_cases = problem.get("test_cases", [])
+
+    result: dict = {
+        "check_pass": False,
+        "verify_pass": None,
+        "verify_tier1": 0,
+        "verify_tier3": 0,
+        "run_correct": None,
+        "tests_total": 0,
+        "tests_passed": 0,
+        "error_message": None,
+    }
+
+    safe_id = problem["id"].replace("-", "_")
+    run_env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY")}
+    run_env["AILANG_TRACE"] = "off"
+
+    code_without_main = _strip_ailang_main(code)
+    # If the LLM forgot a `module ...` line, add one. AILANG requires
+    # the module declaration as the first non-blank/comment line.
+    has_module = any(
+        line.strip().startswith("module ")
+        for line in code_without_main.split("\n")
+        if not line.strip().startswith("--")
+    )
+    if not has_module:
+        code_without_main = f"module benchmark/solution\n\n{code_without_main}"
+
+    # First, type-check the bare module (without any main) — failures here
+    # are compile errors and we don't need to attempt test cases.
+    check_path = work_dir / f"{safe_id}_check_attempt{attempt}.ail"
+    check_path.write_text(code_without_main, encoding="utf-8")
+    try:
+        check_proc = subprocess.run(  # noqa: S603
+            [
+                "ailang",
+                "check",
+                "--relax-modules",
+                str(check_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+            env=run_env,
+        )
+    except FileNotFoundError:
+        result["error_message"] = "ailang not found on PATH"
+        return result
+    except subprocess.TimeoutExpired:
+        result["error_message"] = "ailang check timed out"
+        return result
+
+    # When checking without a main, AILANG may complain about a missing
+    # entrypoint or pure-only module — that's fine if the only error is
+    # the missing main. We treat real compile errors (PAR/TC/MOD) as
+    # failures but tolerate the missing-main case.
+    if check_proc.returncode != 0:
+        err = (check_proc.stderr or check_proc.stdout)[:500]
+        if _is_ailang_compile_error(err) and "missing main" not in err.lower():
+            result["check_pass"] = False
+            result["error_message"] = err
+            if not test_cases:
+                return result
+            result["tests_total"] = len(test_cases)
+            result["run_correct"] = False
+            return result
+
+    result["check_pass"] = True
+
+    if not test_cases:
+        result["run_correct"] = None
+        return result
+
+    result["tests_total"] = len(test_cases)
+    tests_passed = 0
+
+    for i, tc in enumerate(test_cases):
+        if not isinstance(tc, dict):
+            continue
+        args = tc.get("args", [])
+        expected = tc.get("expected")
+        args_str = ", ".join(_ailang_literal(a) for a in args)
+
+        test_main = (
+            f"\n\nexport func main() -> () ! {{IO}} {{\n"
+            f"  println(show({entry_point}({args_str})))\n"
+            f"}}\n"
+        )
+        test_file = code_without_main + test_main
+        test_path = work_dir / f"{safe_id}_test{i}_attempt{attempt}.ail"
+        test_path.write_text(test_file, encoding="utf-8")
+
+        try:
+            run_proc = subprocess.run(  # noqa: S603
+                [
+                    "ailang",
+                    "run",
+                    "--relax-modules",
+                    "--quiet",
+                    "--caps",
+                    "IO",
+                    "--entry",
+                    "main",
+                    str(test_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+                env=run_env,
+            )
+        except subprocess.TimeoutExpired:
+            continue
+
+        if run_proc.returncode != 0:
+            continue
+
+        actual = run_proc.stdout.strip()
+        if _aver_output_matches(actual, expected):
+            tests_passed += 1
+
+    result["tests_passed"] = tests_passed
+    result["run_correct"] = tests_passed == len(test_cases)
+    return result
+
+
 def _strip_aver_main(code: str) -> str:
     """Remove fn main() and its body from Aver code."""
     lines = code.split("\n")
@@ -685,6 +918,10 @@ def run_single_problem(
     # Build prompt
     if language == "aver":
         prompt = build_aver_prompt(problem, skill_md)
+    elif language == "ailang":
+        from vera_bench.prompts import build_ailang_prompt
+
+        prompt = build_ailang_prompt(problem, skill_md)
     elif language == "python":
         prompt = build_python_prompt(problem)
     elif language == "typescript":
@@ -723,6 +960,8 @@ def run_single_problem(
 
     if language == "aver":
         eval_result = _evaluate_aver_code(code, problem, work_dir, attempt=1)
+    elif language == "ailang":
+        eval_result = _evaluate_ailang_code(code, problem, work_dir, attempt=1)
     elif language == "python":
         eval_result = _evaluate_python_code(code, problem, work_dir, attempt=1)
     elif language == "typescript":

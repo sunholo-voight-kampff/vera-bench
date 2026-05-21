@@ -33,6 +33,8 @@ def create_client(model: str) -> LLMClient:
     - claude-* -> AnthropicClient
     - gpt-*, o1-*, o3-* -> OpenAIClient
     - moonshot/* -> MoonshotClient (OpenAI-compatible)
+    - or/* -> OpenRouterClient (OpenAI-compatible; routes to any
+      OpenRouter-hosted model, e.g. or/moonshotai/kimi-k2-0905)
     """
     if model.startswith("claude-") or model.startswith("anthropic/"):
         return AnthropicClient(model)
@@ -45,10 +47,12 @@ def create_client(model: str) -> LLMClient:
         return OpenAIClient(model)
     if model.startswith("moonshot/"):
         return MoonshotClient(model)
+    if model.startswith("or/"):
+        return OpenRouterClient(model)
     raise ValueError(
         f"Unknown model: {model!r}. "
         "Expected claude-*, anthropic/*, gpt-*, o1-*, o3-*, openai/*, "
-        "or moonshot/* prefix."
+        "moonshot/*, or or/* prefix."
     )
 
 
@@ -211,6 +215,76 @@ class MoonshotClient:
             )
         except openai.APITimeoutError as e:
             raise TimeoutError(f"Moonshot API timed out: {e}") from e
+
+        elapsed = time.monotonic() - start
+        choice = response.choices[0] if response.choices else None
+        text = (
+            choice.message.content
+            if choice and choice.message and choice.message.content
+            else ""
+        )
+        usage = response.usage
+        return LLMResponse(
+            text=text or "",
+            input_tokens=usage.prompt_tokens if usage else 0,
+            output_tokens=usage.completion_tokens if usage else 0,
+            wall_time_s=round(elapsed, 2),
+            model=response.model or self._model,
+        )
+
+
+# OpenRouter — OpenAI-compatible API that proxies many model providers.
+# https://openrouter.ai
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+class OpenRouterClient:
+    """OpenRouter client — OpenAI-compatible API.
+
+    Routes to any model hosted on OpenRouter. Use the `or/` prefix and the
+    upstream model id, e.g. `or/moonshotai/kimi-k2-0905` to access the same
+    Kimi K2.5 model that VeraBench's published Vera 100% result used.
+    """
+
+    def __init__(self, model: str) -> None:
+        try:
+            import openai  # noqa: F811
+        except ImportError:
+            raise ImportError(
+                "openai package required for OpenRouter. "
+                "Install with: pip install vera-bench[llm]"
+            ) from None
+
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            raise EnvironmentError("OPENROUTER_API_KEY environment variable not set")
+
+        self._client = openai.OpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
+        self._model = model.removeprefix("or/")
+
+    def complete(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int = 4096,
+        timeout: float = 120.0,
+    ) -> LLMResponse:
+        import openai
+
+        start = time.monotonic()
+        try:
+            response = self._client.with_options(
+                timeout=timeout
+            ).chat.completions.create(
+                model=self._model,
+                max_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+        except openai.APITimeoutError as e:
+            raise TimeoutError(f"OpenRouter API timed out: {e}") from e
 
         elapsed = time.monotonic() - start
         choice = response.choices[0] if response.choices else None
