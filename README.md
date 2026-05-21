@@ -40,10 +40,10 @@ The reference solutions in `solutions/ailang/` are AI-authored too — written b
 | Mode | Author model + date | check@1 | run_correct@1 |
 |------|---------------------|---------|---------------|
 | AI-authored + iterated | **Claude Opus 4.7 (high), 2026-05-21** | **100% (36/36)** | **100% (36/36)** |
-| **LLM single-shot** | **Claude Haiku 4.5, 2026-05-21** | **90%** | **97%** |
-| **LLM single-shot** | **Kimi K2.5 (via OpenRouter), 2026-05-21** | **77%** | **97%** |
+| **LLM single-shot (post-fix)** | **Claude Haiku 4.5, 2026-05-21** | 90% | **100% (36/36)** |
+| **LLM single-shot** | **Kimi K2.5 (via OpenRouter), 2026-05-21** | 77% | 97% |
 
-**The full-circle finding**: AI designs the language, AI writes the code in it, the result passes 97–100% of solvable VeraBench problems across multiple model tiers. A **cheap** LLM (Claude Haiku 4.5) hits 97% run_correct on AILANG — matching what published Vera/Python/TypeScript results show only flagship LLMs achieve. Kimi K2.5 on AILANG hits 97% too vs its published 100% on Vera (3pp gap; same model, different language). See [AILANG_RESULTS.md](./AILANG_RESULTS.md) for the full methodology, per-tier breakdown, and head-to-head comparison.
+**The full-circle finding**: AI designs the language, AI writes the code in it, the result passes **100% of solvable VeraBench problems** with a *cheap* LLM (Claude Haiku 4.5) after one round of teaching-prompt improvement triggered BY this benchmark. The 100% matches the strongest published Vera LLM result (Kimi K2.5 + Vera = 100%) but with a much smaller / cheaper model on an AI-designed language. See [AILANG_RESULTS.md](./AILANG_RESULTS.md) for the full methodology, per-tier breakdown, the persistent-failure investigation, and the upstream fixes shipped during this work (`std/bytes.byteAt` builtin + `letrec`-needs-block-body teaching-prompt example).
 
 ### Key findings
 
