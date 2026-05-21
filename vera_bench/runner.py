@@ -679,6 +679,28 @@ def _evaluate_ailang_code(
     if not has_module:
         code_without_main = f"module benchmark/solution\n\n{code_without_main}"
 
+    # Guard against empty / missing-entry-point modules: an empty module
+    # type-checks but downstream test invocations would fail with
+    # `undefined variable`. Catch this here and report as a clear check
+    # failure rather than a generic runtime error per test case.
+    entry_point_re = re.compile(
+        rf"^\s*(export\s+)?(pure\s+)?func\s+{re.escape(entry_point)}\b"
+    )
+    has_entry_point = any(
+        entry_point_re.match(line) for line in code_without_main.split("\n")
+    )
+    if not has_entry_point:
+        result["check_pass"] = False
+        result["error_message"] = (
+            f"LLM did not define entry point `{entry_point}` "
+            "(empty module or missing function definition)"
+        )
+        if not test_cases:
+            return result
+        result["tests_total"] = len(test_cases)
+        result["run_correct"] = False
+        return result
+
     # First, type-check the bare module (without any main) — failures here
     # are compile errors and we don't need to attempt test cases.
     check_path = work_dir / f"{safe_id}_check_attempt{attempt}.ail"
