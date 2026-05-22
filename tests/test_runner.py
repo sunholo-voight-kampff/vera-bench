@@ -1634,10 +1634,14 @@ class TestRunBenchmarkParallel:
 
     @patch("vera_bench.runner.run_single_problem")
     def test_parallel_writes_are_serialised(self, mock_run, tmp_path):
-        """The write_lock must serialise JSONL writes: every line is a
-        complete, parseable JSON object (no torn writes from interleaving).
-        Worth testing because the comment in the code mentions this is
-        the lock's whole reason for existing."""
+        """JSONL writes from a parallel run must each be a complete,
+        parseable JSON object (no torn writes from interleaving).
+
+        Serialisation is provided by the `for fut in as_completed(...)`
+        loop running on the main thread — workers only run `_run_one`
+        and never touch `output_path`. This test exercises the property
+        under load (20 problems × 8 workers) so a future refactor that
+        accidentally moved the file write into workers would fail here."""
         from vera_bench.runner import run_benchmark
 
         mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
@@ -1709,7 +1713,47 @@ class TestRunBenchmarkParallel:
             ],
         )
         assert "no such option" not in (result.output or "").lower()
-        assert "invalid" not in (result.output or "").lower()
+        # Click signals usage/parse errors with exit_code == 2; anything
+        # else (API-key missing, downstream errors) is fine.
+        assert result.exit_code != 2
+
+    def test_run_command_rejects_zero_parallel(self):
+        """`click.IntRange(min=1)` rejects 0 and negative values at parse
+        time (exit_code == 2). Catches the silent-fall-through-to-sequential
+        bug that `type=int` would have allowed."""
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "run",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--parallel",
+                "0",
+            ],
+        )
+        assert result.exit_code == 2
+        assert "parallel" in (result.output or "").lower()
+
+    def test_run_command_rejects_negative_parallel(self):
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "run",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--parallel",
+                "-5",
+            ],
+        )
+        assert result.exit_code == 2
 
     def test_run_command_parallel_default_is_one(self):
         from click.testing import CliRunner

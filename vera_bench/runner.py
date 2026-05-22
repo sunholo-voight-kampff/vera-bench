@@ -912,10 +912,12 @@ def run_benchmark(
 
                     progress.advance(task)
         else:
-            import threading
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
-            write_lock = threading.Lock()
+            # No write lock needed: the `for fut in as_completed(...)` loop
+            # below runs on the main thread, so the JSONL appends are
+            # already serialised by the loop structure. Workers only run
+            # `_run_one` (the LLM/subprocess work), never touch output_path.
 
             def _run_one(p: dict) -> list[ProblemResult]:
                 return run_single_problem(
@@ -949,10 +951,7 @@ def run_benchmark(
                             continue
                         all_results.extend(problem_results)
                         if output_path:
-                            with (
-                                write_lock,
-                                open(output_path, "a", encoding="utf-8") as f,
-                            ):
+                            with open(output_path, "a", encoding="utf-8") as f:
                                 for r in problem_results:
                                     f.write(r.to_jsonl() + "\n")
                         progress.advance(task)

@@ -78,7 +78,7 @@ def validate(problems_dir: Path | None, solutions_dir: Path | None):
 )
 @click.option(
     "--parallel",
-    type=int,
+    type=click.IntRange(min=1),
     default=1,
     show_default=True,
     help=(
