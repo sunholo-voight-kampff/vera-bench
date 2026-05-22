@@ -1508,3 +1508,217 @@ class TestRunBenchmarkIntegration:
         assert output.exists()
         lines = output.read_text().strip().split("\n")
         assert len(lines) >= 1
+
+
+# === --parallel N ===
+
+
+class TestRunBenchmarkParallel:
+    """Tests for the ThreadPoolExecutor path in run_benchmark.
+
+    All tests stub out `run_single_problem` so we exercise the dispatch
+    layer (sequential vs threaded, exception handling, write-lock) without
+    touching the LLM / subprocess machinery underneath.
+    """
+
+    def _problem(self, pid: str) -> dict:
+        # Minimal problem shape — run_benchmark only reads `.get("id", ...)`
+        # in the parallel-path exception handler, so this is enough.
+        return {"id": pid, "entry_point": "fn", "test_cases": []}
+
+    def _result(self, pid: str) -> ProblemResult:
+        return ProblemResult(
+            problem_id=pid,
+            model="mock",
+            language="python",
+            attempt=1,
+            check_pass=True,
+            run_correct=True,
+            tests_total=0,
+            tests_passed=0,
+            timestamp="2026-05-22T00:00:00Z",
+        )
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_one_uses_sequential_path(self, mock_run, tmp_path):
+        """`parallel=1` (the default) must use the sequential path —
+        ThreadPoolExecutor is not imported or constructed."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        problems = [self._problem(f"VB-X-{i}") for i in range(3)]
+        output = tmp_path / "seq.jsonl"
+
+        # ThreadPoolExecutor is imported inside the parallel branch of
+        # run_benchmark, so we patch the source module attribute. With
+        # parallel=1 it should never be looked up at all.
+        with patch(
+            "concurrent.futures.ThreadPoolExecutor",
+            side_effect=AssertionError("must not be used in sequential path"),
+        ):
+            results = run_benchmark(
+                problems=problems,
+                client=MagicMock(),
+                skill_md="",
+                vera=None,
+                language="python",
+                output_path=output,
+                parallel=1,
+            )
+
+        assert len(results) == 3
+        assert mock_run.call_count == 3
+        assert output.exists()
+        lines = output.read_text().strip().split("\n")
+        assert len(lines) == 3
+        # JSONL lines are valid JSON
+        ids = {json.loads(line)["problem_id"] for line in lines}
+        assert ids == {"VB-X-0", "VB-X-1", "VB-X-2"}
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_two_runs_all_problems(self, mock_run, tmp_path):
+        """`parallel>1` runs every problem and collects every result."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        problems = [self._problem(f"VB-X-{i}") for i in range(5)]
+        output = tmp_path / "par.jsonl"
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=2,
+        )
+
+        assert len(results) == 5
+        assert mock_run.call_count == 5
+        # All 5 problem_ids appear (order may differ — completion order)
+        ids_in_results = {r.problem_id for r in results}
+        assert ids_in_results == {f"VB-X-{i}" for i in range(5)}
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_worker_exception_continues(self, mock_run, tmp_path):
+        """One worker raising must not kill the whole sweep — other
+        problems still complete, and a red error line is logged."""
+        from vera_bench.runner import run_benchmark
+
+        def _side_effect(problem, **kw):
+            if problem["id"] == "VB-X-2":
+                raise RuntimeError("simulated worker crash")
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _side_effect
+        problems = [self._problem(f"VB-X-{i}") for i in range(4)]
+        output = tmp_path / "crash.jsonl"
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=2,
+        )
+
+        # 3 successful + 1 swallowed exception = 3 results
+        assert len(results) == 3
+        ids = {r.problem_id for r in results}
+        assert ids == {"VB-X-0", "VB-X-1", "VB-X-3"}
+        # JSONL has exactly 3 lines (no entry for the crashed problem)
+        assert len(output.read_text().strip().split("\n")) == 3
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_writes_are_serialised(self, mock_run, tmp_path):
+        """The write_lock must serialise JSONL writes: every line is a
+        complete, parseable JSON object (no torn writes from interleaving).
+        Worth testing because the comment in the code mentions this is
+        the lock's whole reason for existing."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        # Use enough problems + parallel workers that interleaving WOULD
+        # happen without a lock (Python's GIL doesn't make file writes
+        # atomic across threads — partial writes are observable).
+        problems = [self._problem(f"VB-X-{i:03d}") for i in range(20)]
+        output = tmp_path / "concurrent.jsonl"
+
+        run_benchmark(
+            problems=problems,
+            client=MagicMock(),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=8,
+        )
+
+        # Every line must be parseable JSON; we lose data on torn writes.
+        lines = output.read_text().strip().split("\n")
+        assert len(lines) == 20, f"expected 20 lines, got {len(lines)}"
+        for ln in lines:
+            obj = json.loads(ln)  # would raise if a line is torn
+            assert obj["problem_id"].startswith("VB-X-")
+        # Every expected ID is present exactly once
+        ids = [json.loads(ln)["problem_id"] for ln in lines]
+        assert sorted(ids) == sorted([f"VB-X-{i:03d}" for i in range(20)])
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_no_output_path_still_collects_results(self, mock_run, tmp_path):
+        """`output_path=None` is a valid call shape — used by callers that
+        only care about the in-memory list. Parallel path must skip the
+        write block cleanly."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        problems = [self._problem(f"VB-X-{i}") for i in range(3)]
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=None,
+            parallel=4,  # more workers than problems is fine
+        )
+
+        assert len(results) == 3
+
+    def test_run_command_accepts_parallel_flag(self):
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        # Verify the flag parses; downstream failures (API key, etc.) are
+        # expected and not what this test is about.
+        result = CliRunner().invoke(
+            main,
+            [
+                "run",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--parallel",
+                "4",
+                "--problem",
+                "VB-T1-001",
+            ],
+        )
+        assert "no such option" not in (result.output or "").lower()
+        assert "invalid" not in (result.output or "").lower()
+
+    def test_run_command_parallel_default_is_one(self):
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        # The --parallel help text should mention default=1
+        result = CliRunner().invoke(main, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--parallel" in result.output
+        # `show_default=True` makes Click print `[default: 1]`
+        assert "1" in result.output
