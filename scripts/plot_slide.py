@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import matplotlib
 
@@ -107,7 +108,7 @@ BACKGROUNDS = {
 DEFAULT_BACKGROUND = "paper"
 
 
-def _patch_models_for_slide():
+def _patch_models_for_slide() -> tuple[ModuleType, list[ModelSpec]]:
     """Temporarily swap plot_results.MODELS for the v0.0.7 lineup.
 
     extract_data() reads from the module-level MODELS in plot_results,
@@ -120,7 +121,9 @@ def _patch_models_for_slide():
     return pr, original
 
 
-def _load_v0_0_7_data(version: str, results_dir: Path):
+def _load_v0_0_7_data(
+    version: str, results_dir: Path
+) -> tuple[dict[str, dict[str, int]], dict[str, dict[str, int]]]:
     """Load the v0.0.7 data once, patched against the historical lineup."""
     pr, original = _patch_models_for_slide()
     try:
@@ -137,7 +140,7 @@ def _load_v0_0_7_data(version: str, results_dir: Path):
     return flagship, sonnet
 
 
-def _slide_rcparams():
+def _slide_rcparams() -> None:
     """rcParams shared across all slide types."""
     matplotlib.rcParams.update(
         {
@@ -152,7 +155,7 @@ def _slide_rcparams():
     )
 
 
-def _style_ax(ax):
+def _style_ax(ax) -> None:
     """Light visual frame so the bars carry the eye."""
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -273,7 +276,7 @@ def render_delta(
 # ----------------------------------------------------------------------
 
 
-def _draw_tier_panel(ax, data: dict, title: str, comparison_modes: list[str]):
+def _draw_tier_panel(ax, data: dict, title: str, comparison_modes: list[str]) -> None:
     """Grouped vertical bars: Vera vs each comparison language, per model."""
     models = list(data.keys())
     languages = ["Vera", *comparison_modes]
@@ -443,7 +446,7 @@ RENDERERS = {
 }
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--type",
@@ -453,8 +456,14 @@ def main():
     )
     parser.add_argument(
         "--version",
+        choices=["0.0.7"],
         default="0.0.7",
-        help="Bench version to plot (default: 0.0.7).",
+        help=(
+            "Bench version to plot. Only '0.0.7' is supported — the model "
+            "lineup is hard-coded to MODELS_V_0_0_7 and other versions "
+            "would silently mis-map labels to data. Future versions would "
+            "need their own lineup and dispatch."
+        ),
     )
     parser.add_argument(
         "--results-dir",
