@@ -31,20 +31,6 @@ Results from [VeraBench v0.0.7](https://github.com/aallan/vera-bench/releases/ta
 | Claude Sonnet 4 | 79% | 96% | 88% |
 | GPT-4o | 78% | 93% | 83% |
 
-### AILANG: AI-designed language, AI-authored solutions (added in this fork)
-
-[AILANG](https://ailang.sunholo.com/) is unique among VeraBench's target languages: **the language itself is 100% AI-authored, by a multi-model team**. Vera, Python, TypeScript, and Aver are human-designed. AILANG's compiler, type system, effect rows, stdlib, and teaching prompt were collaboratively authored by Claude, OpenAI, and Gemini models during AILANG's development.
-
-The reference solutions in `solutions/ailang/` are AI-authored too — written by **Claude Opus 4.7 (effort: high), 2026-05-21**, given AILANG's own teaching prompt as the language reference, with iteration on the harness's check/run feedback (similar to a real coding-agent loop, not a single-shot LLM call).
-
-| Mode | Author model + date | check@1 | run_correct@1 |
-|------|---------------------|---------|---------------|
-| AI-authored + iterated | **Claude Opus 4.7 (high), 2026-05-21** | **100% (36/36)** | **100% (36/36)** |
-| **LLM single-shot (post-fix)** | **Claude Haiku 4.5, 2026-05-21** | 90% | **100% (36/36)** |
-| **LLM single-shot** | **Kimi K2.5 (via OpenRouter), 2026-05-21** | 77% | 97% |
-
-**The full-circle finding**: AI designs the language, AI writes the code in it, the result passes **100% of solvable VeraBench problems** with a *cheap* LLM (Claude Haiku 4.5) after one round of teaching-prompt improvement triggered BY this benchmark. The 100% matches the strongest published Vera LLM result (Kimi K2.5 + Vera = 100%) but with a much smaller / cheaper model on an AI-designed language. See [AILANG_RESULTS.md](./AILANG_RESULTS.md) for the full methodology, per-tier breakdown, the persistent-failure investigation, and the upstream fixes shipped during this work (`std/bytes.byteAt` builtin + `letrec`-needs-block-body teaching-prompt example).
-
 ### Key findings
 
 **Kimi K2.5 writes perfect Vera code** — 100% run_correct on both full-spec and spec-from-NL modes, beating Python (86%) and TypeScript (91%). This is the first model where Vera is the best language across the board.
@@ -84,7 +70,7 @@ For each problem, we measure:
 - **fix@1** — Given the error message, can the model fix it in one turn?
 - **run_correct** — Does execution produce the correct output?
 
-The same problems are also run in Python, TypeScript, and [Aver](https://github.com/jasisz/aver) as baselines. Aver is a Haskell-inspired language with zero LLM training data, providing a second data point alongside Vera for the zero-training-data thesis.
+The same problems are also run in Python, TypeScript, [Aver](https://github.com/jasisz/aver), and [AILANG](https://ailang.sunholo.com/) as baselines. AILANG and Aver are zero-training-data languages, providing additional data points alongside Vera for the language-design-vs-training-data thesis.
 
 > **Cross-language comparison:** For cross-language headline rates, use the T1–T4 aggregate. Tier 5 tests Vera's algebraic effect handlers, which other languages solve with fundamentally different native idioms. See [#50](https://github.com/aallan/vera-bench/issues/50).
 
