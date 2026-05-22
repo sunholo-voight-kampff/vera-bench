@@ -30,5 +30,10 @@ results/timing.json
 assets/results-graph_*.png
 assets/benchmark_*.png
 
-# AILANG runtime cache (created by ailang run in solutions/ailang/)
+# Talk-specific slide artefacts — regenerate with scripts/plot_slide.py.
+# Script is committed; rendered PNGs are talk-prep ephemera and go into
+# the speaker's slide deck rather than the repo.
+assets/vera-bench_slide_*.png
+
+# AILANG runtime cache (created by `ailang run` in solutions/ailang/)
 solutions/ailang/.ailang/
