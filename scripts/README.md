@@ -7,6 +7,7 @@ the installed package, but kept in-repo for reproducibility.
 |--------|---------|
 | [`run_full_benchmark.py`](#run_full_benchmarkpy--full-matrix-benchmark-runner) | Runs every target (Vera, spec-from-NL, Python, TypeScript, Aver + baselines) for one model |
 | [`plot_results.py`](#plot_resultspy--benchmark-comparison-chart) | Generates the headline benchmark comparison chart |
+| [`plot_slide.py`](#plot_slidepy--v007-talk-slide-renderer) | Renders v0.0.7 result panels as 16:9 slides for talk presentation (specialised; v0.0.7 lineup pinned) |
 | [`validate_problems.py`](#validate_problemspy--problem-set-validation) | Validates every problem JSON + canonical Vera solution |
 
 ---
@@ -379,6 +380,72 @@ version-controlled. To reproduce a historical chart, rerun the relevant
 `vera-bench run` / `vera-bench baselines` commands against the target
 bench version and compiler to regenerate the JSONL files locally, then run
 this script.
+
+---
+
+## `plot_slide.py` — v0.0.7 talk-slide renderer
+
+Renders the v0.0.7 result panels as **16:9 slides** sized and styled for
+talk presentation (2880×1620 px, slide-readable typography from the back
+of a room). Three slide types:
+
+- `delta` — the "Does Vera beat Python / TypeScript?" horizontal-bar
+  chart (the headline storytelling slide)
+- `tiers` — Flagship and Sonnet tier comparisons side-by-side
+- `all-modes` — all 6 models × 4 modes in a single grouped-bar panel
+
+### Scope and lifecycle
+
+This is a **specialised, talk-specific** script — not a general slide
+renderer. The v0.0.7 model lineup (Claude Opus 4 / GPT-4.1 / Kimi K2.5
+in flagship; Claude Sonnet 4 / GPT-4o / Kimi K2 Turbo in sonnet) is
+hard-coded in `MODELS_V_0_0_7`, because the live `plot_results.MODELS`
+registry has since been updated to reflect the K2.6 migration (PR #69).
+If you want slides for a future release, either generalise the script
+or duplicate it with the new lineup.
+
+It reuses palette, typography constants, and `extract_data()` from
+`plot_results.py` so the slide numbers match the README chart by
+construction.
+
+### Usage
+
+```bash
+# Render all three slides on the default paper background
+python scripts/plot_slide.py
+# -> /tmp/vera-bench_slide_{delta,tiers,all-modes}.png
+
+# Single slide type
+python scripts/plot_slide.py --type delta
+
+# Try a different background
+python scripts/plot_slide.py --background cream
+
+# Custom output path (only with single --type)
+python scripts/plot_slide.py --type delta --output ~/Desktop/slide-3.png
+```
+
+### Backgrounds
+
+| Choice | Hex | Notes |
+|--------|-----|-------|
+| `paper` (default) | `#FAF7F0` | Off-white; soft, neutral, doesn't compete with chart colours |
+| `white` | `#FFFFFF` | Pure white; baseline / high contrast |
+| `cream` | `#FEEAD1` | On-brand (veralang.dev palette); warmer |
+| `light-grey` | `#F4F4F2` | Neutral, "corporate clean" |
+
+All four are **light themes** — text/spine colours inherited from
+`plot_results.py` work on any of them without inversion. A dark-mode
+background isn't offered because it requires cascading text-colour
+changes that are out of scope for the current talk's design.
+
+### Output handling
+
+Rendered PNGs default to `/tmp/` because they're **talk-prep ephemera**
+that belong in the speaker's slide deck rather than the repo. The
+gitignore covers `assets/vera-bench_slide_*.png` for the case where
+someone explicitly outputs to `assets/` for preview — the canonical
+artefact is the script itself, regeneration is cheap.
 
 ---
 

@@ -29,3 +29,8 @@ results/timing.json
 # produce a suffixed filename and stay local.
 assets/results-graph_*.png
 assets/benchmark_*.png
+
+# Talk-specific slide artefacts — regenerate with scripts/plot_slide.py.
+# Script is committed; rendered PNGs are talk-prep ephemera and go into
+# the speaker's slide deck rather than the repo.
+assets/vera-bench_slide_*.png
