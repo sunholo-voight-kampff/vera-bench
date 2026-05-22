@@ -593,7 +593,7 @@ def _strip_ailang_main(code: str) -> str:
     return "\n".join(out)
 
 
-def _ailang_literal(value) -> str:
+def _ailang_literal(value: object) -> str:
     """Convert a Python value to an AILANG literal expression."""
     if isinstance(value, bool):
         return "true" if value else "false"
