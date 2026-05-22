@@ -651,7 +651,7 @@ def run_ailang_baseline(
     # internally (so we don't need a separate `ailang check` call here).
     try:
         run_result = subprocess.run(  # noqa: S603
-            [
+            [  # noqa: S607
                 "ailang",
                 "run",
                 "--relax-modules",

@@ -279,9 +279,7 @@ def load_ailang_prompt(source: str | Path | None = None) -> str:
                 "Check your ailang installation."
             ) from e
         if result.returncode != 0:
-            raise RuntimeError(
-                f"`ailang prompt` failed: {result.stderr[:200]}"
-            )
+            raise RuntimeError(f"`ailang prompt` failed: {result.stderr[:200]}")
         return result.stdout
 
     return Path(source).read_text(encoding="utf-8")

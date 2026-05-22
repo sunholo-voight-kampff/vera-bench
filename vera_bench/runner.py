@@ -560,9 +560,7 @@ def _strip_ailang_main(code: str) -> str:
         line = lines[i]
         stripped = line.strip()
         # Match: `export func main` / `func main` / `pure func main` etc.
-        is_main_def = bool(
-            re.match(r"(export\s+)?(pure\s+)?func\s+main\b", stripped)
-        )
+        is_main_def = bool(re.match(r"(export\s+)?(pure\s+)?func\s+main\b", stripped))
         if not is_main_def:
             out.append(line)
             i += 1
@@ -691,7 +689,7 @@ def _evaluate_ailang_code(
     check_path.write_text(code_without_main, encoding="utf-8")
     try:
         check_proc = subprocess.run(  # noqa: S603
-            [
+            [  # noqa: S607
                 "ailang",
                 "check",
                 "--relax-modules",
@@ -753,7 +751,7 @@ def _evaluate_ailang_code(
 
         try:
             run_proc = subprocess.run(  # noqa: S603
-                [
+                [  # noqa: S607
                     "ailang",
                     "run",
                     "--relax-modules",
