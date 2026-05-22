@@ -253,6 +253,8 @@ def run(
         parts.append(f"vera-{_ver_slug(vera_ver)}")
     if aver_ver and aver_ver != "unknown":
         parts.append(f"aver-{_ver_slug(aver_ver)}")
+    if ailang_ver and ailang_ver != "unknown":
+        parts.append(f"ailang-{_ver_slug(ailang_ver)}")
     output_path = output_dir / f"{'-'.join(parts)}.jsonl"
 
     # Truncate stale results from previous runs
@@ -267,6 +269,8 @@ def run(
         console.print(f"Aver:     v{aver_ver}")
     if vera_ver:
         console.print(f"Vera:     v{vera_ver}")
+    if ailang_ver:
+        console.print(f"AILANG:   v{ailang_ver}")
     console.print(f"Output:   {output_path}\n")
 
     # Run benchmark

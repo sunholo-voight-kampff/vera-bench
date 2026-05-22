@@ -588,7 +588,9 @@ def _strip_ailang_main(code: str) -> str:
         # but in practice `main = ...` bodies are short. Skip the def line.
         i += 1
         # Drop any immediately-following indented continuation lines.
-        while i < len(lines) and (lines[i].startswith(" ") or lines[i].startswith("\t")):
+        while i < len(lines) and (
+            lines[i].startswith(" ") or lines[i].startswith("\t")
+        ):
             i += 1
     return "\n".join(out)
 
