@@ -1987,7 +1987,30 @@ class TestLoadAilangPrompt:
         mock_run.return_value = MagicMock(
             returncode=1, stdout="", stderr="unknown subcommand"
         )
-        with pytest.raises(RuntimeError, match="failed"):
+        with pytest.raises(RuntimeError, match="failed.*unknown subcommand"):
+            load_ailang_prompt(None)
+
+    @patch("subprocess.run")
+    def test_ailang_prompt_non_zero_exit_stdout_only(self, mock_run):
+        """Some CLI versions write the failure message to stdout instead of
+        stderr. We must coalesce both streams rather than crash with
+        TypeError on `None[:200]`."""
+        from vera_bench.prompts import load_ailang_prompt
+
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="error on stdout instead", stderr=None
+        )
+        with pytest.raises(RuntimeError, match="failed.*error on stdout"):
+            load_ailang_prompt(None)
+
+    @patch("subprocess.run")
+    def test_ailang_prompt_non_zero_exit_no_output(self, mock_run):
+        """Neither stdout nor stderr populated — still raises RuntimeError
+        (not TypeError) with a placeholder message."""
+        from vera_bench.prompts import load_ailang_prompt
+
+        mock_run.return_value = MagicMock(returncode=1, stdout=None, stderr=None)
+        with pytest.raises(RuntimeError, match="non-zero exit"):
             load_ailang_prompt(None)
 
 
