@@ -49,6 +49,7 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from matplotlib.axes import Axes  # noqa: E402
 from matplotlib.patches import Patch  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -155,7 +156,7 @@ def _slide_rcparams() -> None:
     )
 
 
-def _style_ax(ax) -> None:
+def _style_ax(ax: Axes) -> None:
     """Light visual frame so the bars carry the eye."""
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -276,7 +277,9 @@ def render_delta(
 # ----------------------------------------------------------------------
 
 
-def _draw_tier_panel(ax, data: dict, title: str, comparison_modes: list[str]) -> None:
+def _draw_tier_panel(
+    ax: Axes, data: dict, title: str, comparison_modes: list[str]
+) -> None:
     """Grouped vertical bars: Vera vs each comparison language, per model."""
     models = list(data.keys())
     languages = ["Vera", *comparison_modes]
