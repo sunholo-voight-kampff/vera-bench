@@ -106,8 +106,10 @@ def run(
     from vera_bench.runner import run_benchmark
     from vera_bench.vera_runner import VeraRunner
 
-    # Warn on flags that are ignored for the selected language
-    if language not in ("vera", "aver"):
+    # Warn on flags that are ignored for the selected language.
+    # Languages that consume --skill-md as their language-reference doc are
+    # excluded: Vera (SKILL.md), Aver (llms.txt), AILANG (embedded prompt).
+    if language not in ("vera", "aver", "ailang"):
         if skill_md is not None:
             console.print(
                 f"[yellow]Warning: --skill-md is ignored "
@@ -233,10 +235,16 @@ def run(
                 )
                 raise SystemExit(1)
             ailang_ver = _al_proc.stdout.strip().replace("ailang ", "")
-        except (FileNotFoundError, _sp.TimeoutExpired):
+        except FileNotFoundError:
             console.print(
                 "[red]Error: ailang not found on PATH. "
                 "Install from https://github.com/sunholo-data/ailang[/red]"
+            )
+            raise SystemExit(1)
+        except _sp.TimeoutExpired:
+            console.print(
+                "[red]Error: `ailang --version` timed out after 5s. "
+                "Check for a hung ailang process or slow startup.[/red]"
             )
             raise SystemExit(1)
 
