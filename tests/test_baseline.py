@@ -280,14 +280,18 @@ class TestRunAilangBaseline:
     runner's real responsibility is dispatch/result-shape, not file I/O.
     """
 
-    def _problem(self, test_cases=None):
+    def _problem(
+        self, test_cases: list[dict[str, object]] | None = None
+    ) -> dict[str, object]:
         return {
             "id": "VB-T1-001",
             "entry_point": "absolute_value",
             "test_cases": test_cases or [],
         }
 
-    def _proc(self, returncode=0, stdout="", stderr=""):
+    def _proc(
+        self, returncode: int = 0, stdout: str = "", stderr: str = ""
+    ) -> MagicMock:
         m = MagicMock()
         m.returncode = returncode
         m.stdout = stdout
@@ -382,6 +386,37 @@ class TestRunAilangBaseline:
         # confirm `ailang run` was invoked (with-test-cases path)
         args = mock_run.call_args.args[0]
         assert args[:2] == ["ailang", "run"]
+
+    @patch("vera_bench.baseline_runner._find_baseline_file")
+    @patch("vera_bench.baseline_runner.subprocess.run")
+    def test_with_test_cases_bool_normalisation(self, mock_run, mock_find, tmp_path):
+        """Pins the bool-normalisation contract for AILANG output: AILANG
+        prints `true`/`false` (lowercase) for booleans, and the baseline
+        runner reuses `_aver_output_matches`, which handles both the
+        string-expected and Vera-style int-expected (1/0) forms."""
+        baseline = tmp_path / "VB_T4_003.ail"
+        baseline.write_text("module M\n")
+        mock_find.return_value = baseline
+        # AILANG's `println(show(true))` emits lowercase — same as Aver.
+        mock_run.return_value = self._proc(
+            returncode=0, stdout="true\nfalse\ntrue\nfalse"
+        )
+
+        problem = self._problem(
+            test_cases=[
+                # String-form expected (problem JSON often uses this)
+                {"args": [4], "expected": "true"},
+                {"args": [7], "expected": "false"},
+                # Vera-style int-form expected (1/0 -> true/false carve-out
+                # in _aver_output_matches)
+                {"args": [4], "expected": 1},
+                {"args": [7], "expected": 0},
+            ]
+        )
+        result = run_ailang_baseline(problem, tmp_path, tmp_path)
+        assert result.tests_total == 4
+        assert result.tests_passed == 4
+        assert result.run_correct is True
 
     @patch("vera_bench.baseline_runner._find_baseline_file")
     @patch("vera_bench.baseline_runner.subprocess.run")
