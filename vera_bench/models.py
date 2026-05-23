@@ -285,17 +285,58 @@ class OpenRouterClient:
             )
         except openai.APITimeoutError as e:
             raise TimeoutError(f"OpenRouter API timed out: {e}") from e
+        except openai.AuthenticationError as e:
+            # Bad API key — abort the run. Retrying 60 problems with the
+            # same bad key is pure waste.
+            raise EnvironmentError(
+                f"OpenRouter authentication failed (check OPENROUTER_API_KEY): {e}"
+            ) from e
+        except openai.RateLimitError as e:
+            raise RuntimeError(
+                f"OpenRouter rate-limited the model={self._model!r} "
+                f"request: {e}. Slow the sweep or use a higher tier."
+            ) from e
+        except openai.BadRequestError as e:
+            raise RuntimeError(
+                f"OpenRouter rejected the request to model={self._model!r}: {e}. "
+                "Often model id wrong or prompt exceeds context."
+            ) from e
+        except openai.APIStatusError as e:
+            # Catch-all for any other API-side failure (5xx, etc.) — these
+            # used to propagate raw and land as multi-line openai-repr
+            # `error_message` rows in JSONL. Wrap with a clean message.
+            raise RuntimeError(
+                f"OpenRouter API error (status={getattr(e, 'status_code', '?')}) "
+                f"on model={self._model!r}: {e}"
+            ) from e
 
         elapsed = time.monotonic() - start
-        choice = response.choices[0] if response.choices else None
-        text = (
-            choice.message.content
-            if choice and choice.message and choice.message.content
-            else ""
-        )
+
+        # Explicit error if the API returns no choices — without this,
+        # we'd return text="" and the harness would blame the model for
+        # "did not define entry point" when the real fault is API-side.
+        if not response.choices:
+            finish_reason = getattr(response, "finish_reason", "no choices")
+            raise RuntimeError(
+                f"OpenRouter returned no choices for model={self._model!r} "
+                f"(finish_reason={finish_reason})"
+            )
+
+        choice = response.choices[0]
+        # If the choice exists but content is None (e.g. content-filter or
+        # tool-call without text), that's also worth surfacing rather than
+        # silently becoming text="".
+        text = choice.message.content if choice.message else None
+        if not text:
+            finish_reason = getattr(choice, "finish_reason", "unknown")
+            raise RuntimeError(
+                f"OpenRouter returned empty content for model={self._model!r} "
+                f"(finish_reason={finish_reason})"
+            )
+
         usage = response.usage
         return LLMResponse(
-            text=text or "",
+            text=text,
             input_tokens=usage.prompt_tokens if usage else 0,
             output_tokens=usage.completion_tokens if usage else 0,
             wall_time_s=round(elapsed, 2),

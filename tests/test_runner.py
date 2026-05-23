@@ -1275,6 +1275,161 @@ class TestRunSingleProblemAver:
             )
 
 
+class TestRunSingleProblemAilang:
+    """I6 (PR #70): integration-level coverage of `language == "ailang"`
+    dispatch + retry behavior in run_single_problem. Mirrors the Aver
+    pattern at TestRunSingleProblemAver. This is the class whose absence
+    let C2 ship (the missing `language == "ailang"` retry branch was
+    only catchable here, not in unit tests of `_evaluate_ailang_code`)."""
+
+    def _mock_client(self, text: str) -> MagicMock:
+        client = MagicMock()
+        client.complete.return_value = LLMResponse(
+            text=text,
+            input_tokens=100,
+            output_tokens=50,
+            wall_time_s=1.0,
+            model="mock",
+        )
+        return client
+
+    @patch("vera_bench.runner.subprocess.run")
+    def test_ailang_language_dispatches_to_evaluate(self, mock_run, tmp_path):
+        """Smoke test: `language="ailang"` routes to `_evaluate_ailang_code`
+        (which calls `ailang check`, mocked here)."""
+        from vera_bench.runner import run_single_problem
+
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="", stderr=""),  # ailang check
+        ]
+        client = self._mock_client(
+            "module benchmark/solution\n\nexport func test(x: int) -> int = x\n"
+        )
+        results = run_single_problem(
+            problem={
+                "id": "VB-T1-001",
+                "description": "Test",
+                "description_neutral": "Test",
+                "entry_point": "test",
+                "test_cases": [],
+            },
+            client=client,
+            skill_md="# AILANG spec",
+            vera=None,
+            work_dir=tmp_path,
+            language="ailang",
+        )
+        assert len(results) == 1
+        assert results[0].language == "ailang"
+        assert results[0].check_pass is True
+        # The client was called exactly once with the AILANG prompt
+        assert client.complete.call_count == 1
+        sys_msg = client.complete.call_args.kwargs["system"]
+        assert "AILANG" in sys_msg
+
+    @patch("vera_bench.runner.subprocess.run")
+    def test_ailang_no_retry_on_tooling_error(self, mock_run, tmp_path):
+        """C2 + I1 regression: `--max-fix-attempts > 0` must NOT retry
+        when the failure is a tooling problem ("ailang not found" /
+        "timed out") — retrying with the same broken toolchain is waste.
+        Tests _is_tooling_error guard covers the AILANG strings now."""
+        from vera_bench.runner import run_single_problem
+
+        mock_run.side_effect = FileNotFoundError  # ailang not found
+        client = self._mock_client("module M\n\nexport func bad(x: int) -> int = x\n")
+        results = run_single_problem(
+            problem={
+                "id": "VB-T1-001",
+                "description": "Test",
+                "description_neutral": "Test",
+                "entry_point": "bad",
+                "test_cases": [],
+            },
+            client=client,
+            skill_md="# AILANG spec",
+            vera=None,
+            work_dir=tmp_path,
+            language="ailang",
+            max_fix_attempts=2,  # would normally trigger retry
+        )
+        # Single attempt; no retry call
+        assert len(results) == 1
+        assert results[0].check_pass is False
+        assert "ailang not found" in (results[0].error_message or "")
+        assert client.complete.call_count == 1
+
+    @patch("vera_bench.runner.subprocess.run")
+    def test_ailang_retry_on_check_failure(self, mock_run, tmp_path):
+        """C2 regression: the missing dispatch leg meant max_fix_attempts
+        was silently no-op for AILANG, undercounting it vs Aver/Vera.
+        Mirror TestRunSingleProblemAver.test_aver_retry_on_check_failure."""
+        from vera_bench.runner import run_single_problem
+
+        # Both attempts fail check the same way
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="Error TC_001: type mismatch"
+        )
+        client = self._mock_client(
+            "module M\n\nexport func bad(x: int) -> int = true\n"
+        )
+        results = run_single_problem(
+            problem={
+                "id": "VB-T1-001",
+                "description": "Test",
+                "description_neutral": "Test",
+                "entry_point": "bad",
+                "test_cases": [],
+            },
+            client=client,
+            skill_md="# AILANG spec",
+            vera=None,
+            work_dir=tmp_path,
+            language="ailang",
+            max_fix_attempts=2,
+        )
+        # 2 attempts — retry on real check failure
+        assert len(results) == 2
+        assert results[0].attempt == 1
+        assert results[1].attempt == 2
+        # Client called twice (initial + fix prompt). The second call's
+        # user message must reference the original code + error.
+        assert client.complete.call_count == 2
+        fix_user = client.complete.call_args_list[1].kwargs["user"]
+        assert "type mismatch" in fix_user
+        assert "Fix" in fix_user
+
+    @patch("vera_bench.runner.subprocess.run")
+    def test_ailang_no_retry_when_max_fix_attempts_zero(self, mock_run, tmp_path):
+        """max_fix_attempts=0 must skip the retry path entirely, regardless
+        of whether the check failed."""
+        from vera_bench.runner import run_single_problem
+
+        mock_run.return_value = MagicMock(
+            returncode=1, stdout="", stderr="Error TC_001: type mismatch"
+        )
+        client = self._mock_client(
+            "module M\n\nexport func bad(x: int) -> int = true\n"
+        )
+        results = run_single_problem(
+            problem={
+                "id": "VB-T1-001",
+                "description": "Test",
+                "description_neutral": "Test",
+                "entry_point": "bad",
+                "test_cases": [],
+            },
+            client=client,
+            skill_md="# AILANG spec",
+            vera=None,
+            work_dir=tmp_path,
+            language="ailang",
+            max_fix_attempts=0,
+        )
+        # Single attempt; no retry
+        assert len(results) == 1
+        assert client.complete.call_count == 1
+
+
 class TestAverPrompt:
     def test_build_aver_prompt(self):
         from vera_bench.prompts import build_aver_prompt
@@ -1662,19 +1817,16 @@ class TestStripAilangMain:
         assert "println" not in result
         assert "show(helper())" not in result
 
-    @pytest.mark.xfail(
-        reason=(
-            "Known limitation: `{IO}` effect annotation in the main def "
-            "line confuses brace counting in _strip_ailang_main. The "
-            "function treats it as a balanced single-line block and "
-            "skips only the def line, leaving the body in. In practice "
-            "the prompt asks the LLM NOT to write main; this only "
-            "matters when the LLM disobeys with an effect-annotated main."
-        ),
-        strict=True,
-    )
     def test_io_effect_annotation_in_def_line(self):
-        # Documents the known brace-counting bug. Filing as a follow-up.
+        """Regression for C1: prior brace-counting heuristic mis-classified
+        `! {IO}` effect annotations as balanced single-line blocks and
+        left the body in place. The indentation-based strategy handles
+        all three multi-line forms (block `{`/`}`, equals form, single
+        line) correctly regardless of effect-annotation content.
+
+        This is the canonical AILANG main signature the LLM produces
+        when it disobeys the 'no main' instruction — 60 of our own
+        baselines use this exact form."""
         code = (
             "module M\n\n"
             "func foo() -> int = 1\n\n"
@@ -1683,7 +1835,42 @@ class TestStripAilangMain:
             "}\n"
         )
         result = _strip_ailang_main(code)
+        assert "func foo" in result
+        assert "func main" not in result
         assert "println" not in result
+        assert "show(foo())" not in result
+
+    def test_io_effect_annotation_equals_form(self):
+        """Equals form with `! {IO}` annotation — same regression class
+        as the block form above. Indented continuation lines are eaten
+        as the body."""
+        code = (
+            "module M\n\n"
+            "func foo() -> int = 1\n\n"
+            "export func main() -> () ! {IO} =\n"
+            "  println(\n"
+            "    show(foo())\n"
+            "  )\n"
+        )
+        result = _strip_ailang_main(code)
+        assert "func foo" in result
+        assert "func main" not in result
+        assert "println" not in result
+
+    def test_preserves_comment_attached_to_next_def_after_main(self):
+        """Edge case: a comment between a stripped main and the next
+        top-level def stays with the def (col-0 lines stop the swallow
+        loop), not eaten as part of main's body."""
+        code = (
+            "module M\n\n"
+            "export func main() -> () = ()\n\n"
+            "-- helper that does X\n"
+            "export func helper() -> int = 1\n"
+        )
+        result = _strip_ailang_main(code)
+        assert "func main" not in result
+        assert "-- helper that does X" in result
+        assert "func helper" in result
 
     def test_does_not_match_main_substring(self):
         # `mainframe` should NOT be matched as `main` due to `\b`.
@@ -1934,6 +2121,88 @@ class TestEvaluateAilangCode:
         assert len(written) == 1
         contents = written[0].read_text()
         assert "module benchmark/solution" in contents
+
+    @patch("vera_bench.runner.subprocess.run")
+    def test_check_subprocess_contract(self, mock_run, tmp_path):
+        """I1 contract test: pin the exact argv + env the `ailang check`
+        invocation uses. A regression dropping --quiet would cause tracing
+        on stdout → silent test-pass miscount via the line-counting parser.
+        A regression dropping *_API_KEY scrubbing could leak credentials."""
+        import os
+
+        from vera_bench.runner import _evaluate_ailang_code
+
+        mock_run.side_effect = [self._mock_subprocess(returncode=0)]
+        os.environ["ANTHROPIC_API_KEY"] = "fake-key-for-test"
+        try:
+            _evaluate_ailang_code(
+                "module M\n\nexport func absolute_value(x: int) -> int = x\n",
+                self._sample_problem(),
+                tmp_path,
+                1,
+            )
+        finally:
+            del os.environ["ANTHROPIC_API_KEY"]
+
+        # Verify argv
+        argv = mock_run.call_args.args[0]
+        assert argv[0] == "ailang"
+        assert argv[1] == "check"
+        assert "--relax-modules" in argv
+
+        # Verify env: AILANG_TRACE=off and *_API_KEY stripped
+        env = mock_run.call_args.kwargs["env"]
+        assert env.get("AILANG_TRACE") == "off"
+        assert "ANTHROPIC_API_KEY" not in env, (
+            "API keys MUST be scrubbed before invoking ailang subprocess"
+        )
+
+    @patch("vera_bench.runner.subprocess.run")
+    def test_run_subprocess_contract(self, mock_run, tmp_path):
+        """I1 contract test: pin the exact argv + env the `ailang run`
+        invocation uses (--quiet matters most here — without it, AILANG
+        tracing escapes onto stdout and confuses the line-counting parser
+        that matches each line to a test_case)."""
+        import os
+
+        from vera_bench.runner import _evaluate_ailang_code
+
+        # Two calls: check (success), then run (success)
+        mock_run.side_effect = [
+            self._mock_subprocess(returncode=0),  # check
+            self._mock_subprocess(returncode=0, stdout="42"),  # run
+        ]
+        os.environ["OPENAI_API_KEY"] = "fake-key-for-test"
+        try:
+            _evaluate_ailang_code(
+                "module M\n\nexport func absolute_value(x: int) -> int = x\n",
+                self._sample_problem(test_cases=[{"args": [42], "expected": 42}]),
+                tmp_path,
+                1,
+            )
+        finally:
+            del os.environ["OPENAI_API_KEY"]
+
+        # Second call is the `ailang run` invocation
+        argv = mock_run.call_args_list[1].args[0]
+        assert argv[:2] == ["ailang", "run"]
+        # --quiet is load-bearing: suppresses AILANG's standard tracing
+        # output so stdout contains ONLY println() output (one line per
+        # test case). Without it, the line-count match in
+        # baseline_runner._aver_output_matches would misalign.
+        assert "--quiet" in argv
+        assert "--caps" in argv
+        # IO capability is required for println()
+        caps_idx = argv.index("--caps")
+        assert argv[caps_idx + 1] == "IO"
+        # Entry point is always 'main' (the harness-synthesised one)
+        assert "--entry" in argv
+        entry_idx = argv.index("--entry")
+        assert argv[entry_idx + 1] == "main"
+
+        env = mock_run.call_args_list[1].kwargs["env"]
+        assert env.get("AILANG_TRACE") == "off"
+        assert "OPENAI_API_KEY" not in env
 
 
 # === AILANG prompts ===

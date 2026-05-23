@@ -263,8 +263,11 @@ class TestOpenRouterComplete:
         assert called_kwargs["messages"][1]["role"] == "user"
         assert called_kwargs["messages"][1]["content"] == "user"
 
-    def test_complete_empty_response(self, monkeypatch):
-        """OpenRouter handles empty/missing content gracefully."""
+    def test_complete_empty_choices_raises(self, monkeypatch):
+        """I3 (PR #70): empty `choices` is API-side failure, not the
+        model's fault. Must raise rather than return text="" — silent
+        empty-string return was getting blamed on the model as "did not
+        define entry point" in JSONL output."""
         try:
             import openai  # noqa: F401
 
@@ -276,8 +279,8 @@ class TestOpenRouterComplete:
         client = OpenRouterClient("or/test/model")
 
         mock_resp = MagicMock()
-        mock_resp.choices = []  # empty choices
-        mock_resp.usage = None  # missing usage
+        mock_resp.choices = []
+        mock_resp.usage = None
         mock_resp.model = "test/model"
 
         mock_inner = MagicMock()
@@ -285,10 +288,37 @@ class TestOpenRouterComplete:
         client._client = MagicMock()
         client._client.with_options.return_value = mock_inner
 
-        result = client.complete("sys", "user")
-        assert result.text == ""
-        assert result.input_tokens == 0
-        assert result.output_tokens == 0
+        with pytest.raises(RuntimeError, match="returned no choices"):
+            client.complete("sys", "user")
+
+    def test_complete_empty_content_raises(self, monkeypatch):
+        """I3: choice exists but content is None (content-filter,
+        tool-call-only, etc.) — surface as RuntimeError with finish_reason
+        rather than silently text=""."""
+        try:
+            import openai  # noqa: F401
+
+            from vera_bench.models import OpenRouterClient
+        except ImportError:
+            pytest.skip("openai not installed")
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        client = OpenRouterClient("or/test/model")
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = None
+        mock_choice.finish_reason = "content_filter"
+        mock_resp = MagicMock()
+        mock_resp.choices = [mock_choice]
+        mock_resp.model = "test/model"
+
+        mock_inner = MagicMock()
+        mock_inner.chat.completions.create.return_value = mock_resp
+        client._client = MagicMock()
+        client._client.with_options.return_value = mock_inner
+
+        with pytest.raises(RuntimeError, match="empty content.*content_filter"):
+            client.complete("sys", "user")
 
     def test_complete_api_timeout(self, monkeypatch):
         """OpenRouter timeout propagates as TimeoutError."""
@@ -310,4 +340,55 @@ class TestOpenRouterComplete:
         client._client.with_options.return_value = mock_inner
 
         with pytest.raises(TimeoutError, match="OpenRouter API timed out"):
+            client.complete("sys", "user")
+
+    def test_complete_authentication_error_aborts(self, monkeypatch):
+        """I3: AuthenticationError must raise EnvironmentError so the
+        caller aborts the run — retrying 60 problems with a bad key is
+        pure token waste."""
+        try:
+            import openai
+
+            from vera_bench.models import OpenRouterClient
+        except ImportError:
+            pytest.skip("openai not installed")
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        client = OpenRouterClient("or/test/model")
+
+        mock_inner = MagicMock()
+        mock_inner.chat.completions.create.side_effect = openai.AuthenticationError(
+            message="Invalid API key",
+            response=MagicMock(),
+            body=None,
+        )
+        client._client = MagicMock()
+        client._client.with_options.return_value = mock_inner
+
+        with pytest.raises(EnvironmentError, match="OpenRouter authentication"):
+            client.complete("sys", "user")
+
+    def test_complete_rate_limit_error(self, monkeypatch):
+        """I3: RateLimitError surfaces with a clear "slow the sweep"
+        message rather than the raw openai repr."""
+        try:
+            import openai
+
+            from vera_bench.models import OpenRouterClient
+        except ImportError:
+            pytest.skip("openai not installed")
+
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+        client = OpenRouterClient("or/test/model")
+
+        mock_inner = MagicMock()
+        mock_inner.chat.completions.create.side_effect = openai.RateLimitError(
+            message="Rate limit hit",
+            response=MagicMock(),
+            body=None,
+        )
+        client._client = MagicMock()
+        client._client.with_options.return_value = mock_inner
+
+        with pytest.raises(RuntimeError, match="rate-limited"):
             client.complete("sys", "user")

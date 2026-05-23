@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -695,14 +696,20 @@ def run_ailang_baseline(
     elapsed = round(time.monotonic() - start, 2)
 
     if run_result.returncode != 0:
-        # Distinguish compile-time errors (check_pass=False) from runtime errors
-        # by stderr inspection. AILANG's compile errors are prefixed with
-        # "Error PAR_" (parse), "Error TC_" (type-check), or "Error MOD_"
-        # (module). Anything else is treated as a runtime error.
+        # Distinguish compile-time errors (check_pass=False) from runtime
+        # errors by stderr inspection. AILANG's diagnostics are tagged
+        # `Error XXX_NNN` (compile) or other prefixes (runtime/operator).
+        # Use a word-boundary regex rather than substring match so a future
+        # AILANG release adding `Error PARSER_` wouldn't accidentally
+        # match `Error PAR` and silently reclassify runtime → compile.
+        # Known compile-error tag prefixes (extend when AILANG adds more):
         err = (run_result.stderr or "")[:400]
-        is_compile_error = any(
-            tag in err for tag in ("Error PAR", "Error TC", "Error MOD")
-        )
+        compile_tags = ("PAR", "TC", "MOD", "ELB", "LINK", "TY")
+        tag_match = re.search(r"\bError ([A-Z]+)_", err)
+        if tag_match:
+            is_compile_error = tag_match.group(1) in compile_tags
+        else:
+            is_compile_error = False
         return ProblemResult(
             problem_id=problem_id,
             model="baseline",

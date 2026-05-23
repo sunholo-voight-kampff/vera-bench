@@ -18,6 +18,7 @@ from rich.progress import Progress
 
 from vera_bench.models import LLMClient
 from vera_bench.prompts import (
+    build_ailang_fix_prompt,
     build_aver_fix_prompt,
     build_aver_prompt,
     build_fix_prompt,
@@ -546,50 +547,72 @@ def _evaluate_aver_code(
     return result
 
 
+_IS_MAIN_DEF_RE = re.compile(r"^(\s*)(export\s+)?(pure\s+)?func\s+main\b")
+_BARE_CLOSE_BRACE_RE = re.compile(r"^\s*\}\s*(--.*)?$")
+
+
 def _strip_ailang_main(code: str) -> str:
     """Remove any top-level `main` function from AILANG code.
 
-    Handles both single-expression `= expr` and block `{ ... }` forms.
+    Handles all three forms the LLM produces:
+      - single-line `= expr`:            `export func main() -> () = ()`
+      - single-line block `{ … }`:       `export func main() ! {IO} { println("x") }`
+      - multi-line block `{` … `}`:      with body indented and a `}` on a later line
+      - multi-line equals form `=` …:    body indented across multiple lines
+
+    Strategy: don't try to count braces — `! {IO}` effect annotations
+    contain balanced braces which fooled the previous brace-counting
+    heuristic into mis-classifying the def line and leaving the body
+    behind as orphan code (the original bug; CR-flagged 2026-05-22 as
+    C1 on PR #70).
+
+    Instead, after matching the main def line, consume body lines using
+    indentation + structural rules:
+      - blank lines are part of the body block
+      - lines strictly more indented than the def line are the body
+      - a bare `}` (block-close, possibly with a trailing `-- comment`)
+        is the body's close-brace and ends the swallow loop
+      - any other line at the def's indent level (sibling definitions,
+        comments-attached-to-the-next-def) ends the swallow loop
+
     The harness wraps the LLM's function with its own per-test-case main,
     so any main the LLM supplied is stripped to avoid name conflicts.
     """
-    out = []
+    out: list[str] = []
     lines = code.split("\n")
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        stripped = line.strip()
-        # Match: `export func main` / `func main` / `pure func main` etc.
-        is_main_def = bool(re.match(r"(export\s+)?(pure\s+)?func\s+main\b", stripped))
-        if not is_main_def:
-            out.append(line)
+    i, n = 0, len(lines)
+    while i < n:
+        m = _IS_MAIN_DEF_RE.match(lines[i])
+        if not m:
+            out.append(lines[i])
             i += 1
             continue
 
-        # Skip the main definition. Detect single-expr (`=`) vs block (`{`).
-        # Multi-line bodies may span many lines; track brace depth.
-        joined = line
-        if "{" in line and "}" in line:
-            # Single-line `{ ... }` form — just skip this one line.
-            i += 1
-            continue
-        if "{" in line:
-            # Multi-line block — track depth until matching `}`.
-            depth = joined.count("{") - joined.count("}")
-            i += 1
-            while i < len(lines) and depth > 0:
-                depth += lines[i].count("{") - lines[i].count("}")
+        def_indent = len(m.group(1))
+        i += 1  # skip the def line itself
+
+        # Consume the body until the next sibling top-level item.
+        while i < n:
+            line = lines[i]
+            stripped = line.strip()
+            if stripped == "":
+                # Blank lines between the def and its body — keep
+                # swallowing so the result doesn't accumulate trailing
+                # blanks where main used to live.
                 i += 1
-            continue
-        # Otherwise treat as `=` form: the body is the rest of this line.
-        # Future continuation lines (indented) would also be part of it,
-        # but in practice `main = ...` bodies are short. Skip the def line.
-        i += 1
-        # Drop any immediately-following indented continuation lines.
-        while i < len(lines) and (
-            lines[i].startswith(" ") or lines[i].startswith("\t")
-        ):
-            i += 1
+                continue
+            cur_indent = len(line) - len(line.lstrip())
+            if cur_indent > def_indent:
+                # Indented continuation = body.
+                i += 1
+                continue
+            if cur_indent == def_indent and _BARE_CLOSE_BRACE_RE.match(line):
+                # Block-form close brace at def-indent — swallow and stop.
+                i += 1
+                break
+            # Sibling top-level item or comment attached to the next def.
+            # Stop swallowing; outer loop resumes with this line preserved.
+            break
     return "\n".join(out)
 
 
@@ -732,6 +755,14 @@ def _evaluate_ailang_code(
 
     result["tests_total"] = len(test_cases)
     tests_passed = 0
+    # Capture the first non-zero stderr from any test-case run for the
+    # all-tests-fail diagnostic case. Without this, a model that writes
+    # type-correct AILANG that crashes at runtime is indistinguishable
+    # in JSONL output from one with wrong logic (error_message=None,
+    # check_pass=True, run_correct=False, tests_passed=0). CR-flagged
+    # 2026-05-22 as C3 on PR #70. Issue #72 tracks the broader
+    # per-test-stderr-loss concern shared with the Aver path.
+    last_run_error: str | None = None
 
     for i, tc in enumerate(test_cases):
         if not isinstance(tc, dict):
@@ -769,9 +800,22 @@ def _evaluate_ailang_code(
                 env=run_env,
             )
         except subprocess.TimeoutExpired:
+            if last_run_error is None:
+                last_run_error = f"test {i}: ailang run timed out after 30s"
             continue
 
         if run_proc.returncode != 0:
+            if last_run_error is None:
+                # stderr-or-stdout coalesce: AILANG runtime errors land on
+                # stderr in most cases, but quiet mode + some compile-stage
+                # diagnostics land on stdout. Truncate to keep JSONL rows
+                # readable.
+                err = (run_proc.stderr or run_proc.stdout or "").strip()[:400]
+                last_run_error = (
+                    f"test {i}: {err}"
+                    if err
+                    else (f"test {i}: exit {run_proc.returncode} (no output)")
+                )
             continue
 
         actual = run_proc.stdout.strip()
@@ -780,6 +824,10 @@ def _evaluate_ailang_code(
 
     result["tests_passed"] = tests_passed
     result["run_correct"] = tests_passed == len(test_cases)
+    # Only attach last_run_error if we don't have a more upstream error
+    # (e.g. from the check step) — preserve the original failure mode.
+    if last_run_error is not None and not result.get("error_message"):
+        result["error_message"] = last_run_error
     return result
 
 
@@ -996,8 +1044,10 @@ def run_single_problem(
 
     # Attempt 2: fix from error (Aver — only on actual check failures,
     # not tooling errors like "aver not found" or timeouts)
-    _aver_error = eval_result.get("error_message") or ""
-    _is_tooling_error = "aver not found" in _aver_error or "timed out" in _aver_error
+    _err = eval_result.get("error_message") or ""
+    _is_tooling_error = (
+        "aver not found" in _err or "ailang not found" in _err or "timed out" in _err
+    )
     if (
         language == "aver"
         and not eval_result["check_pass"]
@@ -1031,6 +1081,60 @@ def run_single_problem(
 
         fix_code = extract_code(fix_response.text)
         fix_eval = _evaluate_aver_code(fix_code, problem, work_dir, attempt=2)
+
+        results.append(
+            ProblemResult(
+                problem_id=problem["id"],
+                model=fix_response.model,
+                language=language,
+                attempt=2,
+                input_tokens=fix_response.input_tokens,
+                output_tokens=fix_response.output_tokens,
+                wall_time_s=fix_response.wall_time_s,
+                timestamp=_now(),
+                bench_version=bench_version,
+                vera_version=vera_version,
+                **fix_eval,
+            )
+        )
+
+    # Attempt 2: fix from error (AILANG — mirrors the Aver retry path).
+    # The previous omission meant `--max-fix-attempts > 0` was silently
+    # ignored for AILANG, undercounting it vs Aver/Vera by the entire
+    # attempt-2 contribution. CR-flagged 2026-05-22 as C2 on PR #70.
+    if (
+        language == "ailang"
+        and not eval_result["check_pass"]
+        and max_fix_attempts > 0
+        and not _is_tooling_error
+    ):
+        fix_prompt = build_ailang_fix_prompt(
+            code, eval_result.get("error_message", ""), skill_md
+        )
+        try:
+            fix_response = client.complete(
+                system=fix_prompt["system"],
+                user=fix_prompt["user"],
+                max_tokens=max_tokens,
+            )
+        except Exception as e:
+            results.append(
+                ProblemResult(
+                    problem_id=problem["id"],
+                    model=llm_response.model,
+                    language=language,
+                    attempt=2,
+                    check_pass=False,
+                    error_message=f"Fix API error: {e}",
+                    timestamp=_now(),
+                    bench_version=bench_version,
+                    vera_version=vera_version,
+                )
+            )
+            return results
+
+        fix_code = extract_code(fix_response.text)
+        fix_eval = _evaluate_ailang_code(fix_code, problem, work_dir, attempt=2)
 
         results.append(
             ProblemResult(
