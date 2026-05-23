@@ -1555,7 +1555,9 @@ class TestRunBenchmarkParallel:
 
         calling_threads: list[threading.Thread] = []
 
-        def _record_thread(problem, **kw):
+        def _record_thread(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
             calling_threads.append(threading.current_thread())
             return [self._result(problem["id"])]
 
@@ -1596,7 +1598,9 @@ class TestRunBenchmarkParallel:
 
         calling_threads: list[threading.Thread] = []
 
-        def _record_thread(problem, **kw):
+        def _record_thread(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
             calling_threads.append(threading.current_thread())
             return [self._result(problem["id"])]
 
@@ -1657,7 +1661,9 @@ class TestRunBenchmarkParallel:
         carry `check_pass=False, run_correct=False, error_message=<tb>`."""
         from vera_bench.runner import run_benchmark
 
-        def _side_effect(problem, **kw):
+        def _side_effect(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
             if problem["id"] == "VB-X-2":
                 raise RuntimeError("simulated worker crash")
             return [self._result(problem["id"])]
@@ -1685,8 +1691,11 @@ class TestRunBenchmarkParallel:
         lines = output.read_text().strip().split("\n")
         assert len(lines) == 4
         # The crash row carries diagnostic detail in `error_message`.
-        crash_row = next(json.loads(ln) for ln in lines if "Worker crash" in ln)
-        assert crash_row["problem_id"] == "VB-X-2"
+        # Select by problem_id (the structural identifier), not by message
+        # substring — message wording shouldn't be load-bearing in a row
+        # selector.
+        rows = [json.loads(ln) for ln in lines]
+        crash_row = next(row for row in rows if row["problem_id"] == "VB-X-2")
         assert crash_row["check_pass"] is False
         assert "simulated worker crash" in crash_row["error_message"]
         assert "RuntimeError" in crash_row["error_message"]
@@ -1705,7 +1714,9 @@ class TestRunBenchmarkParallel:
         Four-hour sweeps now survive problem 47 of 60 regardless of N."""
         from vera_bench.runner import run_benchmark
 
-        def _side_effect(problem, **kw):
+        def _side_effect(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
             if problem["id"] == "VB-X-1":
                 raise ValueError("LLM returned None mid-sweep")
             return [self._result(problem["id"])]
@@ -1729,8 +1740,8 @@ class TestRunBenchmarkParallel:
         assert ids == {"VB-X-0", "VB-X-1", "VB-X-2"}
         lines = output.read_text().strip().split("\n")
         assert len(lines) == 3
-        crash_row = next(json.loads(ln) for ln in lines if "Worker crash" in ln)
-        assert crash_row["problem_id"] == "VB-X-1"
+        rows = [json.loads(ln) for ln in lines]
+        crash_row = next(row for row in rows if row["problem_id"] == "VB-X-1")
         assert "LLM returned None" in crash_row["error_message"]
         assert "ValueError" in crash_row["error_message"]
 
@@ -1809,7 +1820,9 @@ class TestRunBenchmarkParallel:
         `else:` branch only reached on the success path."""
         from vera_bench.runner import run_benchmark
 
-        def _side_effect(problem, **kw):
+        def _side_effect(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
             if problem["id"] == "VB-X-1":
                 raise RuntimeError("boom")
             return [self._result(problem["id"])]
@@ -1865,7 +1878,7 @@ class TestRunBenchmarkParallel:
 
         captured: list[dict] = []
 
-        def _capture(problem, **kw):
+        def _capture(problem: dict[str, object], **kw: object) -> list[ProblemResult]:
             captured.append({"id": problem["id"], **kw})
             return [self._result(problem["id"])]
 
