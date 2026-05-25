@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import traceback
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -864,20 +865,106 @@ def run_benchmark(
     keep_temps: bool = False,
     bench_version: str = "",
     vera_version: str = "",
+    parallel: int = 1,
 ) -> list[ProblemResult]:
     """Run the full benchmark across all problems.
 
     Results are written to JSONL incrementally (survives crashes).
+
+    When ``parallel > 1``, problems are dispatched to a ThreadPoolExecutor
+    with ``parallel`` workers. Each problem runs independently (its own
+    LLM call, its own subprocess-based check/run), so threads only block
+    on I/O (HTTP to the LLM provider, subprocess spawns to the toolchain).
+    The GIL is not a bottleneck. Use this when sweeping slow models —
+    e.g. Kimi K2.5 at ~50s/problem sequential becomes ~5s/problem with
+    parallel=10.
+
+    JSONL output ordering is by completion order, not by problem index,
+    when running in parallel. Each line is self-contained (carries
+    ``problem_id``) so downstream consumers can sort if needed.
+
+    Worker exceptions are caught (in both sequential and parallel paths)
+    and converted into a visible ``ProblemResult`` row written to JSONL,
+    so downstream ``vera-bench report`` sees an honest denominator
+    rather than a silent under-report when a problem crashes.
     """
     work_dir = Path(tempfile.mkdtemp(prefix="verabench_"))
     all_results: list[ProblemResult] = []
 
+    def _record(problem_results: list[ProblemResult]) -> None:
+        """Append results to the in-memory list AND to output_path (if set)."""
+        all_results.extend(problem_results)
+        if output_path:
+            with open(output_path, "a", encoding="utf-8") as f:
+                for r in problem_results:
+                    f.write(r.to_jsonl() + "\n")
+
+    def _crash_result(problem: dict, exc: BaseException, tb: str) -> ProblemResult:
+        """Synthesise a ProblemResult representing a worker crash.
+
+        Before this existed, worker exceptions vanished silently from the
+        parallel path: a 60-problem sweep with 2 crashes wrote 58 JSONL
+        rows and downstream ``vera-bench report`` showed "58/58 (100%)" —
+        the operator wouldn't know problems had crashed. The crash row
+        keeps the denominator honest and embeds the full traceback in
+        ``error_message`` for post-hoc debugging.
+        """
+        return ProblemResult(
+            problem_id=problem.get("id", "?"),
+            model=getattr(client, "_model", "unknown"),
+            language=language,
+            attempt=0,
+            check_pass=False,
+            run_correct=False,
+            error_message=f"Worker crash: {exc!r}\n{tb}",
+            timestamp=_now(),
+            bench_version=bench_version,
+            vera_version=vera_version,
+        )
+
     try:
-        with Progress(console=console) as progress:
-            task = progress.add_task("Running benchmark...", total=len(problems))
-            for problem in problems:
-                problem_results = run_single_problem(
-                    problem=problem,
+        if parallel <= 1:
+            with Progress(console=console) as progress:
+                task = progress.add_task("Running benchmark...", total=len(problems))
+                for problem in problems:
+                    # Symmetry with the parallel path: a single problem's
+                    # crash is logged + recorded + sweep continues, rather
+                    # than aborting the whole run on problem N of M.
+                    try:
+                        problem_results = run_single_problem(
+                            problem=problem,
+                            client=client,
+                            skill_md=skill_md,
+                            vera=vera,
+                            work_dir=work_dir,
+                            mode=mode,
+                            language=language,
+                            max_fix_attempts=max_fix_attempts,
+                            max_tokens=max_tokens,
+                            bench_version=bench_version,
+                            vera_version=vera_version,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        tb = traceback.format_exc()
+                        pid = problem.get("id", "?")
+                        console.print(f"[red]Worker failed on {pid}: {exc!r}[/red]")
+                        console.print(f"[dim]{tb}[/dim]")
+                        _record([_crash_result(problem, exc, tb)])
+                        progress.advance(task)
+                        continue
+                    _record(problem_results)
+                    progress.advance(task)
+        else:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            # No write lock needed: the `for fut in as_completed(...)` loop
+            # below runs on the main thread, so the JSONL appends are
+            # already serialised by the loop structure. Workers only run
+            # `_run_one` (the LLM/subprocess work), never touch output_path.
+
+            def _run_one(p: dict) -> list[ProblemResult]:
+                return run_single_problem(
+                    problem=p,
                     client=client,
                     skill_md=skill_md,
                     vera=vera,
@@ -889,15 +976,28 @@ def run_benchmark(
                     bench_version=bench_version,
                     vera_version=vera_version,
                 )
-                all_results.extend(problem_results)
 
-                # Write JSONL incrementally
-                if output_path:
-                    with open(output_path, "a", encoding="utf-8") as f:
-                        for r in problem_results:
-                            f.write(r.to_jsonl() + "\n")
-
-                progress.advance(task)
+            with Progress(console=console) as progress:
+                task = progress.add_task(
+                    f"Running benchmark (parallel={parallel})...",
+                    total=len(problems),
+                )
+                with ThreadPoolExecutor(max_workers=parallel) as executor:
+                    futures = {executor.submit(_run_one, p): p for p in problems}
+                    for fut in as_completed(futures):
+                        problem = futures[fut]
+                        try:
+                            problem_results = fut.result()
+                        except Exception as exc:  # noqa: BLE001
+                            tb = traceback.format_exc()
+                            pid = problem.get("id", "?")
+                            console.print(f"[red]Worker failed on {pid}: {exc!r}[/red]")
+                            console.print(f"[dim]{tb}[/dim]")
+                            _record([_crash_result(problem, exc, tb)])
+                            progress.advance(task)
+                            continue
+                        _record(problem_results)
+                        progress.advance(task)
     finally:
         if not keep_temps:
             shutil.rmtree(work_dir, ignore_errors=True)

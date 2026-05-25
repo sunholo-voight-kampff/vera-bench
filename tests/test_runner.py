@@ -1508,3 +1508,474 @@ class TestRunBenchmarkIntegration:
         assert output.exists()
         lines = output.read_text().strip().split("\n")
         assert len(lines) >= 1
+
+
+# === --parallel N ===
+
+
+class TestRunBenchmarkParallel:
+    """Tests for the ThreadPoolExecutor path in run_benchmark.
+
+    All tests stub out `run_single_problem` so we exercise the dispatch
+    layer (sequential vs threaded, exception handling, write-lock) without
+    touching the LLM / subprocess machinery underneath.
+    """
+
+    def _problem(self, pid: str) -> dict:
+        # Minimal problem shape — run_benchmark only reads `.get("id", ...)`
+        # in the parallel-path exception handler, so this is enough.
+        return {"id": pid, "entry_point": "fn", "test_cases": []}
+
+    def _result(self, pid: str) -> ProblemResult:
+        return ProblemResult(
+            problem_id=pid,
+            model="mock",
+            language="python",
+            attempt=1,
+            check_pass=True,
+            run_correct=True,
+            tests_total=0,
+            tests_passed=0,
+            timestamp="2026-05-22T00:00:00Z",
+        )
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_one_uses_sequential_path(self, mock_run, tmp_path):
+        """`parallel=1` (the default) must use the sequential path: all
+        calls to `run_single_problem` happen on the main thread, i.e. no
+        worker thread is ever spawned.
+
+        Assertion is on observable behaviour (the calling thread identity)
+        rather than the implementation detail of which class gets imported —
+        a future refactor that hoisted `ThreadPoolExecutor` to module
+        scope (legitimate change) would still pass this test."""
+        import threading
+
+        from vera_bench.runner import run_benchmark
+
+        calling_threads: list[threading.Thread] = []
+
+        def _record_thread(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
+            calling_threads.append(threading.current_thread())
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _record_thread
+        problems = [self._problem(f"VB-X-{i}") for i in range(3)]
+        output = tmp_path / "seq.jsonl"
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=1,
+        )
+
+        assert len(results) == 3
+        assert mock_run.call_count == 3
+        # Behaviour assertion: every call ran on the main thread (no spawn).
+        main = threading.main_thread()
+        assert all(t is main for t in calling_threads), (
+            f"expected all calls on main thread; got {calling_threads}"
+        )
+        # And the JSONL output is correct.
+        lines = output.read_text().strip().split("\n")
+        assert len(lines) == 3
+        ids = {json.loads(line)["problem_id"] for line in lines}
+        assert ids == {"VB-X-0", "VB-X-1", "VB-X-2"}
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_two_actually_spawns_worker_threads(self, mock_run, tmp_path):
+        """Counterpoint to the sequential-path test: `parallel>1` does
+        spawn worker threads (not all calls run on the main thread)."""
+        import threading
+
+        from vera_bench.runner import run_benchmark
+
+        calling_threads: list[threading.Thread] = []
+
+        def _record_thread(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
+            calling_threads.append(threading.current_thread())
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _record_thread
+        problems = [self._problem(f"VB-X-{i}") for i in range(5)]
+
+        run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=None,
+            parallel=3,
+        )
+
+        main = threading.main_thread()
+        worker_calls = [t for t in calling_threads if t is not main]
+        assert worker_calls, (
+            "parallel>1 should spawn worker threads — got all main-thread calls"
+        )
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_two_runs_all_problems(self, mock_run, tmp_path):
+        """`parallel>1` runs every problem and collects every result."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        problems = [self._problem(f"VB-X-{i}") for i in range(5)]
+        output = tmp_path / "par.jsonl"
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=2,
+        )
+
+        assert len(results) == 5
+        assert mock_run.call_count == 5
+        # All 5 problem_ids appear (order may differ — completion order)
+        ids_in_results = {r.problem_id for r in results}
+        assert ids_in_results == {f"VB-X-{i}" for i in range(5)}
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_worker_exception_continues(self, mock_run, tmp_path):
+        """One worker raising must not kill the whole sweep — other
+        problems still complete, AND the crashed problem appears as a
+        visible row in the JSONL output (with traceback in `error_message`).
+
+        Regression guard for the silent-denominator-change bug: prior
+        behaviour was that crashes vanished from JSONL, so a 60-problem
+        sweep with 2 crashes reported 58/58 (100%). Now every problem
+        produces a row — successes carry the normal fields, crashes
+        carry `check_pass=False, run_correct=False, error_message=<tb>`."""
+        from vera_bench.runner import run_benchmark
+
+        def _side_effect(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
+            if problem["id"] == "VB-X-2":
+                raise RuntimeError("simulated worker crash")
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _side_effect
+        problems = [self._problem(f"VB-X-{i}") for i in range(4)]
+        output = tmp_path / "crash.jsonl"
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=2,
+        )
+
+        # ALL 4 problems produce a result row — 3 successes + 1 crash.
+        assert len(results) == 4
+        ids = {r.problem_id for r in results}
+        assert ids == {"VB-X-0", "VB-X-1", "VB-X-2", "VB-X-3"}
+        # JSONL has 4 lines (the crash row IS written so report doesn't
+        # silently shrink the denominator).
+        lines = output.read_text().strip().split("\n")
+        assert len(lines) == 4
+        # The crash row carries diagnostic detail in `error_message`.
+        # Select by problem_id (the structural identifier), not by message
+        # substring — message wording shouldn't be load-bearing in a row
+        # selector.
+        rows = [json.loads(ln) for ln in lines]
+        crash_row = next(row for row in rows if row["problem_id"] == "VB-X-2")
+        assert crash_row["check_pass"] is False
+        assert "simulated worker crash" in crash_row["error_message"]
+        assert "RuntimeError" in crash_row["error_message"]
+        # And a traceback is included for post-hoc debugging.
+        assert "Traceback" in crash_row["error_message"]
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_sequential_worker_exception_also_continues(self, mock_run, tmp_path):
+        """Sequential (parallel=1) path has the SAME fault semantics as
+        the parallel path: a single crashed problem doesn't abort the
+        whole sweep, and the crash is recorded in JSONL.
+
+        Closes the prior asymmetry where `--parallel 1` and `--parallel 2`
+        had different fault behaviour on the same input (sequential aborted
+        on a transient model-response error, parallel logged-and-continued).
+        Four-hour sweeps now survive problem 47 of 60 regardless of N."""
+        from vera_bench.runner import run_benchmark
+
+        def _side_effect(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
+            if problem["id"] == "VB-X-1":
+                raise ValueError("LLM returned None mid-sweep")
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _side_effect
+        problems = [self._problem(f"VB-X-{i}") for i in range(3)]
+        output = tmp_path / "seq-crash.jsonl"
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=1,
+        )
+
+        assert len(results) == 3
+        ids = {r.problem_id for r in results}
+        assert ids == {"VB-X-0", "VB-X-1", "VB-X-2"}
+        lines = output.read_text().strip().split("\n")
+        assert len(lines) == 3
+        rows = [json.loads(ln) for ln in lines]
+        crash_row = next(row for row in rows if row["problem_id"] == "VB-X-1")
+        assert "LLM returned None" in crash_row["error_message"]
+        assert "ValueError" in crash_row["error_message"]
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_writes_are_serialised(self, mock_run, tmp_path):
+        """JSONL writes from a parallel run must each be a complete,
+        parseable JSON object (no torn writes from interleaving).
+
+        Serialisation is provided by the `for fut in as_completed(...)`
+        loop running on the main thread — workers only run `_run_one`
+        and never touch `output_path`. This test exercises the property
+        under load (20 problems × 8 workers) so a future refactor that
+        accidentally moved the file write into workers would fail here."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        # 20 problems × 8 workers gives many completion-order opportunities
+        # for interleaved writes if a future refactor moved the file write
+        # into workers. Note: this test does NOT prove anything about POSIX
+        # O_APPEND atomicity (short writes < PIPE_BUF on POSIX would be
+        # atomic anyway) — it proves the main-thread `as_completed` loop
+        # is the actual serialisation source.
+        problems = [self._problem(f"VB-X-{i:03d}") for i in range(20)]
+        output = tmp_path / "concurrent.jsonl"
+
+        run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=output,
+            parallel=8,
+        )
+
+        # Every line must be parseable JSON; we lose data on torn writes.
+        lines = output.read_text().strip().split("\n")
+        assert len(lines) == 20, f"expected 20 lines, got {len(lines)}"
+        for ln in lines:
+            obj = json.loads(ln)  # would raise if a line is torn
+            assert obj["problem_id"].startswith("VB-X-")
+        # Every expected ID is present exactly once
+        ids = [json.loads(ln)["problem_id"] for ln in lines]
+        assert sorted(ids) == sorted([f"VB-X-{i:03d}" for i in range(20)])
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_parallel_no_output_path_still_collects_results(self, mock_run, tmp_path):
+        """`output_path=None` is a valid call shape — used by callers that
+        only care about the in-memory list. Parallel path must skip the
+        write block cleanly."""
+        from vera_bench.runner import run_benchmark
+
+        mock_run.side_effect = lambda problem, **kw: [self._result(problem["id"])]
+        problems = [self._problem(f"VB-X-{i}") for i in range(3)]
+
+        results = run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=None,
+            parallel=4,  # more workers than problems is fine
+        )
+
+        assert len(results) == 3
+
+    @patch("vera_bench.runner.Progress")
+    @patch("vera_bench.runner.run_single_problem")
+    def test_progress_advances_on_crash_path(self, mock_run, mock_progress, tmp_path):
+        """`progress.advance` must fire even when a worker raises — both
+        sequential and parallel paths. Otherwise the bar hangs at N-1/N
+        if any problem crashes, misleading anyone watching the run.
+
+        Catches a refactor that accidentally moved `advance` into an
+        `else:` branch only reached on the success path."""
+        from vera_bench.runner import run_benchmark
+
+        def _side_effect(
+            problem: dict[str, object], **kw: object
+        ) -> list[ProblemResult]:
+            if problem["id"] == "VB-X-1":
+                raise RuntimeError("boom")
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _side_effect
+
+        progress_inst = MagicMock()
+        mock_progress.return_value.__enter__.return_value = progress_inst
+        progress_inst.add_task.return_value = "task-token"
+
+        problems = [self._problem(f"VB-X-{i}") for i in range(4)]
+        # Parallel path
+        run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=tmp_path / "par.jsonl",
+            parallel=2,
+        )
+        assert progress_inst.advance.call_count == 4, (
+            f"parallel: advance should fire for every problem (3 successes "
+            f"+ 1 crash = 4); got {progress_inst.advance.call_count}"
+        )
+
+        # Sequential path (reset and re-run)
+        progress_inst.advance.reset_mock()
+        run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=tmp_path / "seq.jsonl",
+            parallel=1,
+        )
+        assert progress_inst.advance.call_count == 4, (
+            f"sequential: advance should fire for every problem; "
+            f"got {progress_inst.advance.call_count}"
+        )
+
+    @patch("vera_bench.runner.run_single_problem")
+    def test_bench_and_vera_version_propagate_to_workers(self, mock_run, tmp_path):
+        """`bench_version` / `vera_version` are captured by closure into
+        `_run_one` in the parallel path; if a future refactor dropped
+        them from the kwargs forwarded to `run_single_problem`, JSONL
+        rows would silently get empty version strings.
+
+        This test forwards observed kwargs so a regression where the
+        closure stops propagating them surfaces immediately."""
+        from vera_bench.runner import run_benchmark
+
+        captured: list[dict] = []
+
+        def _capture(problem: dict[str, object], **kw: object) -> list[ProblemResult]:
+            captured.append({"id": problem["id"], **kw})
+            return [self._result(problem["id"])]
+
+        mock_run.side_effect = _capture
+        problems = [self._problem(f"VB-X-{i}") for i in range(3)]
+
+        run_benchmark(
+            problems=problems,
+            client=MagicMock(_model="mock"),
+            skill_md="",
+            vera=None,
+            language="python",
+            output_path=None,
+            parallel=3,
+            bench_version="0.0.11",
+            vera_version="0.0.108",
+        )
+
+        assert len(captured) == 3
+        for kw in captured:
+            assert kw["bench_version"] == "0.0.11", (
+                f"bench_version not forwarded: got {kw.get('bench_version')!r}"
+            )
+            assert kw["vera_version"] == "0.0.108", (
+                f"vera_version not forwarded: got {kw.get('vera_version')!r}"
+            )
+
+    def test_run_command_accepts_parallel_flag(self):
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        # Verify the flag parses; downstream failures (API key, etc.) are
+        # expected and not what this test is about.
+        result = CliRunner().invoke(
+            main,
+            [
+                "run",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--parallel",
+                "4",
+                "--problem",
+                "VB-T1-001",
+            ],
+        )
+        assert "no such option" not in (result.output or "").lower()
+        # Click signals usage/parse errors with exit_code == 2; anything
+        # else (API-key missing, downstream errors) is fine.
+        assert result.exit_code != 2
+
+    def test_run_command_rejects_zero_parallel(self):
+        """`click.IntRange(min=1)` rejects 0 and negative values at parse
+        time (exit_code == 2). Catches the silent-fall-through-to-sequential
+        bug that `type=int` would have allowed."""
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "run",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--parallel",
+                "0",
+            ],
+        )
+        assert result.exit_code == 2
+        assert "parallel" in (result.output or "").lower()
+
+    def test_run_command_rejects_negative_parallel(self):
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "run",
+                "--model",
+                "claude-haiku-4-5-20251001",
+                "--parallel",
+                "-5",
+            ],
+        )
+        assert result.exit_code == 2
+
+    def test_run_command_parallel_default_is_one(self):
+        from click.testing import CliRunner
+
+        from vera_bench.cli import main
+
+        # The --parallel help text should mention default=1
+        result = CliRunner().invoke(main, ["run", "--help"])
+        assert result.exit_code == 0
+        assert "--parallel" in result.output
+        # `show_default=True` makes Click print `[default: 1]`
+        assert "1" in result.output
